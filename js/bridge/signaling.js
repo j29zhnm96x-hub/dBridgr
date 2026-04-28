@@ -2,11 +2,18 @@ function resolveBaseUrl(explicitBaseUrl) {
   return explicitBaseUrl || window.__DBRIDGR_SIGNALING_URL__ || window.location.origin;
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
 async function requestJson(baseUrl, pathname, options = {}) {
   const response = await fetch(new URL(pathname, resolveBaseUrl(baseUrl)), {
     ...options,
+    cache: 'no-store',
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers || {}),
     },
   });
@@ -22,7 +29,10 @@ export class SignalingClient extends EventTarget {
   constructor(baseUrl) {
     super();
     this.baseUrl = resolveBaseUrl(baseUrl);
-    this.eventSource = null;
+    this.pollController = null;
+    this.pollGeneration = 0;
+    this.cursor = 0;
+    this.lastStreamErrorAt = 0;
   }
 
   async createSession() {
@@ -41,26 +51,64 @@ export class SignalingClient extends EventTarget {
 
   connectStream({ code, clientId }) {
     this.close();
-    const endpoint = new URL(`/api/session/${code}/events`, this.baseUrl);
-    endpoint.searchParams.set('clientId', clientId);
+    this.cursor = 0;
+    this.pollGeneration += 1;
+    this.pollController = new AbortController();
+    void this.pollLoop({
+      code,
+      clientId,
+      generation: this.pollGeneration,
+      signal: this.pollController.signal,
+    });
+  }
 
-    this.eventSource = new EventSource(endpoint.toString());
-    this.eventSource.onmessage = (event) => {
-      if (!event.data) {
-        return;
-      }
+  async pollLoop({ code, clientId, generation, signal }) {
+    let backoffMs = 900;
 
+    while (!signal.aborted && generation === this.pollGeneration) {
       try {
-        const payload = JSON.parse(event.data);
-        this.dispatchEvent(new CustomEvent('message', { detail: payload }));
-      } catch {
-        this.dispatchEvent(new CustomEvent('stream-error', { detail: { message: 'Received malformed signaling data.' } }));
-      }
-    };
+        const payload = await requestJson(
+          this.baseUrl,
+          `/api/session/${code}/events?clientId=${encodeURIComponent(clientId)}&cursor=${this.cursor}`,
+          {
+            method: 'GET',
+            signal,
+          }
+        );
 
-    this.eventSource.onerror = () => {
-      this.dispatchEvent(new CustomEvent('stream-error', { detail: { message: 'Signaling stream interrupted.' } }));
-    };
+        if (signal.aborted || generation !== this.pollGeneration) {
+          return;
+        }
+
+        backoffMs = 900;
+        if (typeof payload.cursor === 'number' && payload.cursor >= this.cursor) {
+          this.cursor = payload.cursor;
+        }
+
+        for (const event of payload.events || []) {
+          this.dispatchEvent(new CustomEvent('message', { detail: event }));
+        }
+
+        await wait(payload.retryAfterMs ?? 900);
+      } catch (error) {
+        if (signal.aborted || generation !== this.pollGeneration) {
+          return;
+        }
+
+        const now = Date.now();
+        if (now - this.lastStreamErrorAt > 4000) {
+          this.lastStreamErrorAt = now;
+          this.dispatchEvent(new CustomEvent('stream-error', {
+            detail: {
+              message: error instanceof Error ? error.message : 'Signaling stream interrupted.',
+            },
+          }));
+        }
+
+        await wait(backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 4000);
+      }
+    }
   }
 
   async send(code, clientId, type, data) {
@@ -78,9 +126,10 @@ export class SignalingClient extends EventTarget {
   }
 
   close() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    this.pollGeneration += 1;
+    if (this.pollController) {
+      this.pollController.abort();
+      this.pollController = null;
     }
   }
 }

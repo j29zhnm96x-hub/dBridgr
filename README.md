@@ -135,6 +135,29 @@ If you separate the frontend from signaling, either:
 1. reverse-proxy `/api/*` from the frontend origin to the signaling service, or
 2. set `window.__DBRIDGR_SIGNALING_URL__` before `js/main.js` loads so the client targets the signaling origin.
 
+### Cloudflare Pages with built-in signaling
+
+This repo now includes Cloudflare Pages Functions under `functions/api/session/*` for the signaling routes.
+
+Those Functions require a D1 binding named `DBRIDGR_DB`.
+
+Cloudflare setup steps:
+
+1. Create a D1 database in Cloudflare.
+2. Apply the schema in `d1/schema.sql` to that database.
+3. Open your Pages project settings and add a D1 binding named `DBRIDGR_DB`.
+4. Redeploy the Pages project.
+
+What this fixes:
+
+- `POST /api/session`
+- `POST /api/session/:code/join`
+- `GET /api/session/:code/events?clientId=...&cursor=...`
+- `POST /api/session/:code/signal`
+- `DELETE /api/session/:code`
+
+Without that D1 binding, the app shell will load on Cloudflare Pages, but hosting or joining will fail because there is no persistent signaling state behind `/api/*`.
+
 ## iPhone and browser caveats
 
 These are real browser limits, not app bugs:

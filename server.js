@@ -27,12 +27,12 @@ const MIME_TYPES = {
 const NO_STORE_EXTENSIONS = new Set(['.css', '.html', '.js', '.svg', '.webmanifest']);
 
 const SESSION_TTL_MS = 5 * 60 * 1000;
+const SESSION_END_GRACE_MS = 60 * 1000;
+const STREAM_ACTIVITY_TTL_MS = 15 * 1000;
 const MAX_MESSAGE_BYTES = 256 * 1024;
+const POLL_RETRY_MS = 900;
+const MAX_EVENT_LOG_LENGTH = 256;
 const sessions = new Map();
-
-function emitEvent(response, payload) {
-  response.write(`data: ${JSON.stringify(payload)}\n\n`);
-}
 
 function json(response, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -61,39 +61,62 @@ function createSessionRecord(code) {
     code,
     id: crypto.randomUUID(),
     createdAt: now,
+    updatedAt: now,
     expiresAt: now + SESSION_TTL_MS,
+    endedAt: null,
     host: null,
     guest: null,
-    queues: {
-      host: [],
-      guest: [],
-    },
+    nextEventId: 1,
+    events: [],
   };
 }
 
+function isConnected(client) {
+  return Boolean(client?.lastSeenAt && Date.now() - client.lastSeenAt <= STREAM_ACTIVITY_TTL_MS);
+}
+
+function appendEvent(session, targetRole, message) {
+  session.events.push({
+    id: session.nextEventId,
+    targetRole,
+    ...message,
+  });
+  session.nextEventId += 1;
+
+  if (session.events.length > MAX_EVENT_LOG_LENGTH) {
+    session.events.splice(0, session.events.length - MAX_EVENT_LOG_LENGTH);
+  }
+}
+
+function appendEventForBoth(session, message) {
+  appendEvent(session, 'host', message);
+  appendEvent(session, 'guest', message);
+}
+
 function endSession(session, payload) {
-  enqueueFor(session, 'host', payload);
-  enqueueFor(session, 'guest', payload);
-
-  if (session.host?.stream) {
-    flushQueue(session.host.stream, session, 'host');
-  }
-  if (session.guest?.stream) {
-    flushQueue(session.guest.stream, session, 'guest');
+  if (session.endedAt) {
+    return;
   }
 
-  sessions.delete(session.code);
+  session.endedAt = Date.now();
+  session.expiresAt = null;
+  session.updatedAt = session.endedAt;
+  appendEventForBoth(session, payload);
 }
 
 function sweepExpiredSessions() {
   const now = Date.now();
   for (const [code, session] of sessions) {
-    if (!session.guest && session.expiresAt && session.expiresAt <= now) {
+    if (!session.endedAt && !session.guest && session.expiresAt && session.expiresAt <= now) {
       endSession(session, {
         type: 'session-ended',
         by: 'server',
         reason: 'expired',
       });
+    }
+
+    if (session.endedAt && now - session.endedAt > SESSION_END_GRACE_MS) {
+      sessions.delete(code);
     }
   }
 }
@@ -110,41 +133,49 @@ function getRole(session, clientId) {
 
 function ensureClient(session, role) {
   if (!session[role]) {
-    session[role] = { clientId: crypto.randomUUID() };
+    session[role] = {
+      clientId: crypto.randomUUID(),
+      lastSeenAt: 0,
+    };
   }
   return session[role];
 }
 
-function enqueueFor(session, role, message) {
-  session.queues[role].push(message);
-}
-
-function flushQueue(response, session, role) {
-  const queue = session.queues[role];
-  emitEvent(response, { type: 'ready' });
-  if (!queue.length) {
-    return;
-  }
-  while (queue.length) {
-    emitEvent(response, queue.shift());
-  }
-}
-
-function broadcastPeerState(session) {
-  const hostConnected = Boolean(session.host?.stream);
-  const guestConnected = Boolean(session.guest?.stream);
-  const payload = {
+function buildPeerState(session) {
+  return {
     type: 'peer-state',
     hostPresent: Boolean(session.host),
     guestPresent: Boolean(session.guest),
-    hostConnected,
-    guestConnected,
+    hostConnected: isConnected(session.host),
+    guestConnected: isConnected(session.guest),
     expiresAt: session.expiresAt,
   };
-  enqueueFor(session, 'host', payload);
-  enqueueFor(session, 'guest', payload);
-  session.host?.stream && flushQueue(session.host.stream, session, 'host');
-  session.guest?.stream && flushQueue(session.guest.stream, session, 'guest');
+}
+
+function collectEvents(session, role, cursor) {
+  const events = [buildPeerState(session)];
+  let nextCursor = Number.isFinite(cursor) ? cursor : 0;
+
+  for (const event of session.events) {
+    if (event.targetRole !== role || event.id <= nextCursor) {
+      continue;
+    }
+
+    nextCursor = event.id;
+    events.push({
+      type: event.type,
+      data: event.data,
+      from: event.from,
+      by: event.by,
+      reason: event.reason,
+      sentAt: event.sentAt,
+    });
+  }
+
+  return {
+    cursor: nextCursor,
+    events,
+  };
 }
 
 function readRequestBody(request) {
@@ -192,12 +223,17 @@ async function handleJoinSession(code, response) {
     json(response, 404, { error: 'Code not found or expired' });
     return;
   }
+  if (session.endedAt) {
+    json(response, 410, { error: 'Code not found or expired' });
+    return;
+  }
   if (session.guest) {
     json(response, 409, { error: 'Session is already paired' });
     return;
   }
   const guest = ensureClient(session, 'guest');
   session.expiresAt = null;
+  session.updatedAt = Date.now();
   json(response, 200, {
     code,
     sessionId: session.id,
@@ -206,7 +242,7 @@ async function handleJoinSession(code, response) {
   });
 }
 
-async function handleEventStream(code, url, request, response) {
+async function handleEventPoll(code, url, response) {
   sweepExpiredSessions();
   const session = sessions.get(code);
   const clientId = url.searchParams.get('clientId');
@@ -221,21 +257,14 @@ async function handleEventStream(code, url, request, response) {
     return;
   }
 
-  response.writeHead(200, {
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-store',
-    Connection: 'keep-alive',
-    'Content-Type': 'text/event-stream',
-  });
-  session[role].stream = response;
-  flushQueue(response, session, role);
-  broadcastPeerState(session);
+  const cursor = Number.parseInt(url.searchParams.get('cursor') || '0', 10);
+  session[role].lastSeenAt = Date.now();
+  session.updatedAt = session[role].lastSeenAt;
 
-  request.on('close', () => {
-    if (session[role]?.stream === response) {
-      session[role].stream = null;
-      broadcastPeerState(session);
-    }
+  const payload = collectEvents(session, role, cursor);
+  json(response, 200, {
+    ...payload,
+    retryAfterMs: POLL_RETRY_MS,
   });
 }
 
@@ -261,18 +290,19 @@ async function handleSignalPost(code, request, response) {
     json(response, 403, { error: 'Unknown client' });
     return;
   }
+  if (session.endedAt) {
+    json(response, 410, { error: 'This bridge has already ended.' });
+    return;
+  }
 
   const targetRole = role === 'host' ? 'guest' : 'host';
-  const message = {
+  appendEvent(session, targetRole, {
     type,
     data,
     from: role,
     sentAt: Date.now(),
-  };
-  enqueueFor(session, targetRole, message);
-  if (session[targetRole]?.stream) {
-    flushQueue(session[targetRole].stream, session, targetRole);
-  }
+  });
+  session.updatedAt = Date.now();
   json(response, 202, { ok: true });
 }
 
@@ -350,7 +380,7 @@ const server = http.createServer(async (request, response) => {
 
   const eventsMatch = pathname.match(/^\/api\/session\/(\d{4})\/events$/);
   if (request.method === 'GET' && eventsMatch) {
-    await handleEventStream(eventsMatch[1], url, request, response);
+    await handleEventPoll(eventsMatch[1], url, response);
     return;
   }
 
