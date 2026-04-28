@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dBridgr favicon">
+  <defs>
+    <linearGradient id="favBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#102430" />
+      <stop offset="100%" stop-color="#1d4949" />
+    </linearGradient>
+    <linearGradient id="favGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffb57c" />
+      <stop offset="100%" stop-color="#7df0e6" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#favBg)" />
+  <path d="M16 40c0-9 7-16 16-16s16 7 16 16" fill="none" stroke="url(#favGlow)" stroke-linecap="round" stroke-width="5" />
+  <circle cx="16" cy="40" r="7" fill="#f6f1e8" />
+  <circle cx="32" cy="24" r="7" fill="#f6f1e8" />
+  <circle cx="48" cy="40" r="7" fill="#f6f1e8" />
+  <circle cx="16" cy="40" r="3" fill="#102430" />
+  <circle cx="32" cy="24" r="3" fill="#102430" />
+  <circle cx="48" cy="40" r="3" fill="#102430" />
+</svg>

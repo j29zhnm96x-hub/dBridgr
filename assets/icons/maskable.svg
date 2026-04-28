@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="dBridgr maskable icon">
+  <defs>
+    <linearGradient id="maskBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117" />
+      <stop offset="52%" stop-color="#122c35" />
+      <stop offset="100%" stop-color="#184141" />
+    </linearGradient>
+    <linearGradient id="maskGlow" x1="10%" y1="10%" x2="90%" y2="90%">
+      <stop offset="0%" stop-color="#ffb57c" />
+      <stop offset="100%" stop-color="#7df0e6" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#maskBg)" />
+  <circle cx="128" cy="124" r="86" fill="#ffad73" opacity="0.16" />
+  <circle cx="408" cy="404" r="110" fill="#63d9d1" opacity="0.18" />
+  <g transform="translate(42 40)">
+    <rect x="54" y="70" width="320" height="278" rx="106" fill="none" stroke="url(#maskGlow)" stroke-width="32" />
+    <path d="M116 310c0-78 63-141 140-141 77 0 140 63 140 141" fill="none" stroke="#f6f1e8" stroke-linecap="round" stroke-width="20" opacity="0.9" />
+    <circle cx="116" cy="310" r="48" fill="#f6f1e8" />
+    <circle cx="396" cy="310" r="48" fill="#f6f1e8" />
+    <circle cx="256" cy="170" r="48" fill="#f6f1e8" />
+    <circle cx="116" cy="310" r="20" fill="#0f1117" />
+    <circle cx="396" cy="310" r="20" fill="#0f1117" />
+    <circle cx="256" cy="170" r="20" fill="#0f1117" />
+  </g>
+</svg>

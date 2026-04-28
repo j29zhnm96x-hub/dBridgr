@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0f1016">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="dBridgr">
+  <meta name="description" content="Bridge text, photos, videos, and files between two devices over WebRTC.">
+  <title>dBridgr</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+  <div class="ambient ambient--one"></div>
+  <div class="ambient ambient--two"></div>
+
+  <div class="app-shell">
+    <header class="app-bar">
+      <div>
+        <p class="eyebrow">Peer-to-peer utility</p>
+        <h1>dBridgr</h1>
+      </div>
+      <nav class="screen-nav" aria-label="Primary">
+        <button class="screen-nav__button is-active" type="button" data-screen-target="bridge">Bridge</button>
+        <button class="screen-nav__button" type="button" data-screen-target="settings">Settings</button>
+      </nav>
+    </header>
+
+    <main class="screen-stack">
+      <section class="screen is-active" data-screen="bridge">
+        <section class="connection-card panel">
+          <div class="connection-card__header">
+            <div>
+              <p class="eyebrow">Connection</p>
+              <h2>Ready to bridge</h2>
+            </div>
+            <span class="status-pill" id="connection-status" data-status="idle">Idle</span>
+          </div>
+
+          <p class="connection-card__copy" id="connection-note">Create a code on one device, then join it from the other device. Payload bytes move over WebRTC, not through the signaling server.</p>
+
+          <div class="connection-card__meta">
+            <article class="meta-tile meta-tile--code">
+              <span class="meta-tile__label">4-digit code</span>
+              <strong class="meta-tile__value" id="bridge-code">----</strong>
+              <small class="meta-tile__subtext" id="code-expiry">Host to generate a temporary code.</small>
+            </article>
+            <article class="meta-tile">
+              <span class="meta-tile__label">Other device</span>
+              <strong class="meta-tile__value meta-tile__value--small" id="peer-label">Waiting for pairing</strong>
+              <small class="meta-tile__subtext" id="peer-note">Bidirectional transfers become available after pairing.</small>
+            </article>
+          </div>
+
+          <div class="connection-card__actions">
+            <button class="button button--primary" type="button" id="host-button">Host a Bridge</button>
+            <button class="button button--secondary" type="button" id="open-join-button">Join with Code</button>
+            <button class="button button--ghost" type="button" id="disconnect-button" disabled>Disconnect</button>
+          </div>
+        </section>
+
+        <section class="panel composer-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Send</p>
+              <h2>Choose what to bridge</h2>
+            </div>
+            <p class="section-heading__note">Each transfer is chunked to respect mobile browser limits.</p>
+          </div>
+
+          <div class="composer-tabs" role="tablist" aria-label="Composer tabs">
+            <button class="composer-tab is-active" type="button" role="tab" aria-selected="true" data-composer-target="text">Text</button>
+            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="photo">Photo</button>
+            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="video">Video</button>
+            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="file">File</button>
+          </div>
+
+          <div class="composer-stack">
+            <article class="composer-card is-active" data-composer="text">
+              <label class="field-label" for="text-input">Paste or type text</label>
+              <textarea id="text-input" rows="6" maxlength="50000" placeholder="Drop a note, URL, Wi-Fi password, or anything else you want to move instantly."></textarea>
+              <div class="composer-card__foot">
+                <div class="action-group">
+                  <button class="button button--ghost" type="button" id="paste-text-button">Paste</button>
+                  <button class="button button--ghost" type="button" id="clear-text-button">Clear</button>
+                </div>
+                <button class="button button--primary" type="button" id="send-text-button">Bridge It</button>
+              </div>
+            </article>
+
+            <article class="composer-card" data-composer="photo">
+              <label class="field-label">Photo source</label>
+              <div class="picker-row">
+                <input class="visually-hidden" type="file" id="photo-camera-input" accept="image/*" capture="environment" aria-label="Take a photo" title="Take a photo">
+                <input class="visually-hidden" type="file" id="photo-library-input" accept="image/*" aria-label="Choose a photo" title="Choose a photo">
+                <button class="button button--secondary" type="button" data-open-input="photo-camera-input">Take Photo</button>
+                <button class="button button--ghost" type="button" data-open-input="photo-library-input">Choose Photo</button>
+              </div>
+              <div class="selection-card" id="photo-selection">
+                <p class="selection-card__empty">No photo selected yet.</p>
+              </div>
+              <div class="composer-card__foot">
+                <p class="inline-note" id="photo-warning">Camera capture support depends on the device browser.</p>
+                <button class="button button--primary" type="button" id="send-photo-button">Bridge It</button>
+              </div>
+            </article>
+
+            <article class="composer-card" data-composer="video">
+              <label class="field-label">Video source</label>
+              <div class="picker-row">
+                <input class="visually-hidden" type="file" id="video-camera-input" accept="video/*" capture="environment" aria-label="Record a video" title="Record a video">
+                <input class="visually-hidden" type="file" id="video-library-input" accept="video/*" aria-label="Choose a video" title="Choose a video">
+                <button class="button button--secondary" type="button" data-open-input="video-camera-input">Record Video</button>
+                <button class="button button--ghost" type="button" data-open-input="video-library-input">Choose Video</button>
+              </div>
+              <div class="selection-card" id="video-selection">
+                <p class="selection-card__empty">No video selected yet.</p>
+              </div>
+              <div class="composer-card__foot">
+                <p class="inline-note" id="video-warning">Large videos can strain iPhone memory. A warning appears before big transfers.</p>
+                <button class="button button--primary" type="button" id="send-video-button">Bridge It</button>
+              </div>
+            </article>
+
+            <article class="composer-card" data-composer="file">
+              <label class="field-label">Any file</label>
+              <div class="picker-row picker-row--single">
+                <input class="visually-hidden" type="file" id="generic-file-input" aria-label="Choose a file" title="Choose a file">
+                <button class="button button--secondary" type="button" data-open-input="generic-file-input">Choose File</button>
+              </div>
+              <div class="selection-card" id="file-selection">
+                <p class="selection-card__empty">No file selected yet.</p>
+              </div>
+              <div class="composer-card__foot">
+                <p class="inline-note" id="file-warning">Files stay peer-to-peer after the session is paired.</p>
+                <button class="button button--primary" type="button" id="send-file-button">Bridge It</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel transfer-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Activity</p>
+              <h2>Transfer progress</h2>
+            </div>
+          </div>
+          <div class="transfer-list" id="transfer-list">
+            <p class="empty-state">No active transfers yet.</p>
+          </div>
+        </section>
+
+        <section class="panel inbox-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Received</p>
+              <h2>Incoming content</h2>
+            </div>
+            <p class="section-heading__note">Finished transfers stay here until you clear local state.</p>
+          </div>
+          <div class="received-list" id="received-list">
+            <p class="empty-state">Incoming text, photos, videos, and files will appear here.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="screen" data-screen="settings">
+        <section class="panel settings-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Settings</p>
+              <h2>Practical controls</h2>
+            </div>
+          </div>
+
+          <article class="settings-card">
+            <div>
+              <h3>Theme</h3>
+              <p>Switch between the curated light and dark looks. The preference stays on this device.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="theme-toggle">
+              <span class="switch__track"></span>
+              <span class="switch__label" id="theme-toggle-label">Dark mode off</span>
+            </label>
+          </article>
+
+          <article class="settings-card">
+            <h3>Add to Home Screen</h3>
+            <p id="install-help">Open dBridgr in Safari, tap Share, then choose Add to Home Screen.</p>
+          </article>
+
+          <article class="settings-card">
+            <h3>Diagnostics</h3>
+            <ul class="diagnostics-list">
+              <li id="diagnostic-online">Network: checking…</li>
+              <li id="diagnostic-display">Display mode: browser</li>
+              <li id="diagnostic-service-worker">Offline shell cache: pending</li>
+            </ul>
+            <p class="settings-card__note">Pairing still needs the signaling endpoint. Large transfers depend on browser memory and WebRTC channel stability.</p>
+          </article>
+
+          <article class="settings-card settings-card--actions">
+            <button class="button button--ghost" type="button" id="clear-local-button">Clear local preferences and received history</button>
+          </article>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="sheet-backdrop" id="join-sheet" hidden>
+    <section class="sheet" aria-labelledby="join-sheet-title" aria-modal="true" role="dialog">
+      <div class="sheet__header">
+        <div>
+          <p class="eyebrow">Pair a device</p>
+          <h2 id="join-sheet-title">Join with a 4-digit code</h2>
+        </div>
+        <button class="icon-button" type="button" id="close-join-button" aria-label="Close join dialog">×</button>
+      </div>
+      <label class="field-label" for="join-code-input">Code</label>
+      <input id="join-code-input" class="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="one-time-code">
+      <p class="sheet__note">If someone sent you a dBridgr link with a code, it will auto-fill here.</p>
+      <div class="sheet__actions">
+        <button class="button button--ghost" type="button" id="cancel-join-button">Cancel</button>
+        <button class="button button--primary" type="button" id="join-button">Join Bridge</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></section>
+
+  <noscript>
+    <section class="noscript">
+      dBridgr requires JavaScript for WebRTC, signaling, and the PWA shell.
+    </section>
+  </noscript>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

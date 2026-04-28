@@ -1,0 +1,12 @@
+{
+  "name": "dbridgr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mobile-first peer-to-peer bridge for text, media, and files.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
