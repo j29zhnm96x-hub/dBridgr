@@ -557,10 +557,72 @@ html[data-theme="dark"] .settings-card {
   color: var(--text);
 }
 
+.bridge-workbench {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.bridge-workbench__grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.bridge-workbench__section {
+  display: grid;
+  gap: var(--space-3);
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme="dark"] .bridge-workbench__section {
+  background: rgba(24, 30, 41, 0.72);
+}
+
 .transfer-list,
 .received-list {
   display: grid;
   gap: 0.9rem;
+}
+
+.history-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.history-panel__actions {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: end;
+}
+
+.history-panel .transfer-list {
+  gap: 0.7rem;
+}
+
+.history-panel .transfer-item {
+  padding: 0.85rem 0.95rem;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+html[data-theme="dark"] .history-panel .transfer-item {
+  background: rgba(24, 30, 41, 0.68);
+}
+
+.history-panel .transfer-item__header,
+.history-panel .transfer-item__progress,
+.history-panel .transfer-item__meta {
+  margin-bottom: 0.55rem;
+}
+
+.history-panel .transfer-item__meta {
+  font-size: 0.86rem;
+}
+
+.history-panel .transfer-item__progress {
+  height: 0.42rem;
 }
 
 .transfer-item__header,
@@ -821,6 +883,16 @@ html[data-theme="dark"] .received-text {
     grid-column: 1 / span 2;
   }
 
+  .screen[data-screen="bridge"] .bridge-workbench,
+  .screen[data-screen="bridge"] .history-panel {
+    grid-column: 1 / span 2;
+  }
+
+  .bridge-workbench__grid {
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+    align-items: start;
+  }
+
   .composer-panel {
     grid-column: 1 / 2;
   }
@@ -854,6 +926,14 @@ html[data-theme="dark"] .received-text {
   .screen-nav {
     align-self: stretch;
     justify-content: space-between;
+  }
+
+  .history-panel__actions {
+    justify-items: stretch;
+  }
+
+  .history-panel__actions .button {
+    width: 100%;
   }
 
   .connection-card__actions .button,

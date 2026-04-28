@@ -32,139 +32,124 @@
 
     <main class="screen-stack">
       <section class="screen is-active" data-screen="bridge">
-        <section class="connection-card panel">
-          <div class="connection-card__header">
-            <div>
-              <p class="eyebrow">Connection</p>
-              <h2>Ready to bridge</h2>
-            </div>
-            <span class="status-pill" id="connection-status" data-status="idle">Idle</span>
-          </div>
-
-          <p class="connection-card__copy" id="connection-note">Create a code on one device, then join it from the other device. Payload bytes move over WebRTC, not through the signaling server.</p>
-
-          <div class="connection-card__meta">
-            <article class="meta-tile meta-tile--code">
-              <span class="meta-tile__label">4-digit code</span>
-              <strong class="meta-tile__value" id="bridge-code">----</strong>
-              <small class="meta-tile__subtext" id="code-expiry">Host to generate a temporary code.</small>
-            </article>
-            <article class="meta-tile">
-              <span class="meta-tile__label">Other device</span>
-              <strong class="meta-tile__value meta-tile__value--small" id="peer-label">Waiting for pairing</strong>
-              <small class="meta-tile__subtext" id="peer-note">Bidirectional transfers become available after pairing.</small>
-            </article>
-          </div>
-
-          <div class="connection-card__actions">
-            <button class="button button--primary" type="button" id="host-button">Host a Bridge</button>
-            <button class="button button--secondary" type="button" id="open-join-button">Join with Code</button>
-            <button class="button button--ghost" type="button" id="disconnect-button" disabled>Disconnect</button>
-          </div>
-        </section>
-
-        <section class="panel composer-panel">
+        <section class="panel bridge-workbench">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Send</p>
-              <h2>Choose what to bridge</h2>
+              <p class="eyebrow">Transfer hub</p>
+              <h2>Send and receive in one place</h2>
             </div>
-            <p class="section-heading__note">Each transfer is chunked to respect mobile browser limits.</p>
+            <p class="section-heading__note">Keep the bridge compact: send on the left, review received content on the right.</p>
           </div>
 
-          <div class="composer-tabs" role="tablist" aria-label="Composer tabs">
-            <button class="composer-tab is-active" type="button" role="tab" aria-selected="true" data-composer-target="text">Text</button>
-            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="photo">Photo</button>
-            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="video">Video</button>
-            <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="file">File</button>
-          </div>
-
-          <div class="composer-stack">
-            <article class="composer-card is-active" data-composer="text">
-              <label class="field-label" for="text-input">Paste or type text</label>
-              <textarea id="text-input" rows="6" maxlength="50000" placeholder="Drop a note, URL, Wi-Fi password, or anything else you want to move instantly."></textarea>
-              <div class="composer-card__foot">
-                <div class="action-group">
-                  <button class="button button--ghost" type="button" id="paste-text-button">Paste</button>
-                  <button class="button button--ghost" type="button" id="clear-text-button">Clear</button>
+          <div class="bridge-workbench__grid">
+            <article class="bridge-workbench__section bridge-workbench__section--send">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Send</p>
+                  <h3>Choose what to bridge</h3>
                 </div>
-                <button class="button button--primary" type="button" id="send-text-button">Bridge It</button>
+                <p class="section-heading__note">Each transfer is chunked to respect mobile browser limits.</p>
+              </div>
+
+              <div class="composer-tabs" role="tablist" aria-label="Composer tabs">
+                <button class="composer-tab is-active" type="button" role="tab" aria-selected="true" data-composer-target="text">Text</button>
+                <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="photo">Photo</button>
+                <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="video">Video</button>
+                <button class="composer-tab" type="button" role="tab" aria-selected="false" data-composer-target="file">File</button>
+              </div>
+
+              <div class="composer-stack">
+                <article class="composer-card is-active" data-composer="text">
+                  <label class="field-label" for="text-input">Paste or type text</label>
+                  <textarea id="text-input" rows="6" maxlength="50000" placeholder="Drop a note, URL, Wi-Fi password, or anything else you want to move instantly."></textarea>
+                  <div class="composer-card__foot">
+                    <div class="action-group">
+                      <button class="button button--ghost" type="button" id="paste-text-button">Paste</button>
+                      <button class="button button--ghost" type="button" id="clear-text-button">Clear</button>
+                    </div>
+                    <button class="button button--primary" type="button" id="send-text-button">Bridge It</button>
+                  </div>
+                </article>
+
+                <article class="composer-card" data-composer="photo">
+                  <label class="field-label">Photo source</label>
+                  <div class="picker-row">
+                    <input class="visually-hidden" type="file" id="photo-camera-input" accept="image/*" capture="environment" aria-label="Take a photo" title="Take a photo">
+                    <input class="visually-hidden" type="file" id="photo-library-input" accept="image/*" aria-label="Choose a photo" title="Choose a photo">
+                    <button class="button button--secondary" type="button" data-open-input="photo-camera-input">Take Photo</button>
+                    <button class="button button--ghost" type="button" data-open-input="photo-library-input">Choose Photo</button>
+                  </div>
+                  <div class="selection-card" id="photo-selection">
+                    <p class="selection-card__empty">No photo selected yet.</p>
+                  </div>
+                  <div class="composer-card__foot">
+                    <p class="inline-note" id="photo-warning">Camera capture support depends on the device browser.</p>
+                    <button class="button button--primary" type="button" id="send-photo-button">Bridge It</button>
+                  </div>
+                </article>
+
+                <article class="composer-card" data-composer="video">
+                  <label class="field-label">Video source</label>
+                  <div class="picker-row">
+                    <input class="visually-hidden" type="file" id="video-camera-input" accept="video/*" capture="environment" aria-label="Record a video" title="Record a video">
+                    <input class="visually-hidden" type="file" id="video-library-input" accept="video/*" aria-label="Choose a video" title="Choose a video">
+                    <button class="button button--secondary" type="button" data-open-input="video-camera-input">Record Video</button>
+                    <button class="button button--ghost" type="button" data-open-input="video-library-input">Choose Video</button>
+                  </div>
+                  <div class="selection-card" id="video-selection">
+                    <p class="selection-card__empty">No video selected yet.</p>
+                  </div>
+                  <div class="composer-card__foot">
+                    <p class="inline-note" id="video-warning">Large videos can strain iPhone memory. A warning appears before big transfers.</p>
+                    <button class="button button--primary" type="button" id="send-video-button">Bridge It</button>
+                  </div>
+                </article>
+
+                <article class="composer-card" data-composer="file">
+                  <label class="field-label">Any file</label>
+                  <div class="picker-row picker-row--single">
+                    <input class="visually-hidden" type="file" id="generic-file-input" aria-label="Choose a file" title="Choose a file">
+                    <button class="button button--secondary" type="button" data-open-input="generic-file-input">Choose File</button>
+                  </div>
+                  <div class="selection-card" id="file-selection">
+                    <p class="selection-card__empty">No file selected yet.</p>
+                  </div>
+                  <div class="composer-card__foot">
+                    <p class="inline-note" id="file-warning">Files stay peer-to-peer after the session is paired.</p>
+                    <button class="button button--primary" type="button" id="send-file-button">Bridge It</button>
+                  </div>
+                </article>
               </div>
             </article>
 
-            <article class="composer-card" data-composer="photo">
-              <label class="field-label">Photo source</label>
-              <div class="picker-row">
-                <input class="visually-hidden" type="file" id="photo-camera-input" accept="image/*" capture="environment" aria-label="Take a photo" title="Take a photo">
-                <input class="visually-hidden" type="file" id="photo-library-input" accept="image/*" aria-label="Choose a photo" title="Choose a photo">
-                <button class="button button--secondary" type="button" data-open-input="photo-camera-input">Take Photo</button>
-                <button class="button button--ghost" type="button" data-open-input="photo-library-input">Choose Photo</button>
+            <article class="bridge-workbench__section bridge-workbench__section--received">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Received</p>
+                  <h3>Incoming content</h3>
+                </div>
+                <p class="section-heading__note">Finished transfers stay here until you clear the session.</p>
               </div>
-              <div class="selection-card" id="photo-selection">
-                <p class="selection-card__empty">No photo selected yet.</p>
-              </div>
-              <div class="composer-card__foot">
-                <p class="inline-note" id="photo-warning">Camera capture support depends on the device browser.</p>
-                <button class="button button--primary" type="button" id="send-photo-button">Bridge It</button>
-              </div>
-            </article>
-
-            <article class="composer-card" data-composer="video">
-              <label class="field-label">Video source</label>
-              <div class="picker-row">
-                <input class="visually-hidden" type="file" id="video-camera-input" accept="video/*" capture="environment" aria-label="Record a video" title="Record a video">
-                <input class="visually-hidden" type="file" id="video-library-input" accept="video/*" aria-label="Choose a video" title="Choose a video">
-                <button class="button button--secondary" type="button" data-open-input="video-camera-input">Record Video</button>
-                <button class="button button--ghost" type="button" data-open-input="video-library-input">Choose Video</button>
-              </div>
-              <div class="selection-card" id="video-selection">
-                <p class="selection-card__empty">No video selected yet.</p>
-              </div>
-              <div class="composer-card__foot">
-                <p class="inline-note" id="video-warning">Large videos can strain iPhone memory. A warning appears before big transfers.</p>
-                <button class="button button--primary" type="button" id="send-video-button">Bridge It</button>
-              </div>
-            </article>
-
-            <article class="composer-card" data-composer="file">
-              <label class="field-label">Any file</label>
-              <div class="picker-row picker-row--single">
-                <input class="visually-hidden" type="file" id="generic-file-input" aria-label="Choose a file" title="Choose a file">
-                <button class="button button--secondary" type="button" data-open-input="generic-file-input">Choose File</button>
-              </div>
-              <div class="selection-card" id="file-selection">
-                <p class="selection-card__empty">No file selected yet.</p>
-              </div>
-              <div class="composer-card__foot">
-                <p class="inline-note" id="file-warning">Files stay peer-to-peer after the session is paired.</p>
-                <button class="button button--primary" type="button" id="send-file-button">Bridge It</button>
+              <div class="received-list" id="received-list">
+                <p class="empty-state">Incoming text, photos, videos, and files will appear here.</p>
               </div>
             </article>
           </div>
         </section>
 
-        <section class="panel transfer-panel">
+        <section class="panel history-panel transfer-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Activity</p>
-              <h2>Transfer progress</h2>
+              <p class="eyebrow">History</p>
+              <h2>Recent transfers</h2>
+            </div>
+            <div class="history-panel__actions">
+              <p class="section-heading__note">A compact log of recent activity.</p>
+              <button class="button button--ghost" type="button" id="clear-session-button">Clear all</button>
             </div>
           </div>
           <div class="transfer-list" id="transfer-list">
-            <p class="empty-state">No active transfers yet.</p>
-          </div>
-        </section>
-
-        <section class="panel inbox-panel">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Received</p>
-              <h2>Incoming content</h2>
-            </div>
-            <p class="section-heading__note">Finished transfers stay here until you clear local state.</p>
-          </div>
-          <div class="received-list" id="received-list">
-            <p class="empty-state">Incoming text, photos, videos, and files will appear here.</p>
+            <p class="empty-state">No transfer history yet.</p>
           </div>
         </section>
       </section>
@@ -177,6 +162,37 @@
               <h2>Practical controls</h2>
             </div>
           </div>
+
+          <section class="panel connection-card">
+            <div class="connection-card__header">
+              <div>
+                <p class="eyebrow">Connection</p>
+                <h2>Ready to bridge</h2>
+              </div>
+              <span class="status-pill" id="connection-status" data-status="idle">Idle</span>
+            </div>
+
+            <p class="connection-card__copy" id="connection-note">Create a code on one device, then join it from the other device. Payload bytes move over WebRTC, not through the signaling server.</p>
+
+            <div class="connection-card__meta">
+              <article class="meta-tile meta-tile--code">
+                <span class="meta-tile__label">4-digit code</span>
+                <strong class="meta-tile__value" id="bridge-code">----</strong>
+                <small class="meta-tile__subtext" id="code-expiry">Host to generate a temporary code.</small>
+              </article>
+              <article class="meta-tile">
+                <span class="meta-tile__label">Other device</span>
+                <strong class="meta-tile__value meta-tile__value--small" id="peer-label">Waiting for pairing</strong>
+                <small class="meta-tile__subtext" id="peer-note">Bidirectional transfers become available after pairing.</small>
+              </article>
+            </div>
+
+            <div class="connection-card__actions">
+              <button class="button button--primary" type="button" id="host-button">Host a Bridge</button>
+              <button class="button button--secondary" type="button" id="open-join-button">Join with Code</button>
+              <button class="button button--ghost" type="button" id="disconnect-button" disabled>Disconnect</button>
+            </div>
+          </section>
 
           <article class="settings-card">
             <div>
@@ -203,10 +219,6 @@
               <li id="diagnostic-service-worker">Offline shell cache: pending</li>
             </ul>
             <p class="settings-card__note">Pairing still needs the signaling endpoint. Large transfers depend on browser memory and WebRTC channel stability.</p>
-          </article>
-
-          <article class="settings-card settings-card--actions">
-            <button class="button button--ghost" type="button" id="clear-local-button">Clear local preferences and received history</button>
           </article>
         </section>
       </section>

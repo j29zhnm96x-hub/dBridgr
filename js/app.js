@@ -1,4 +1,3 @@
-import { clearStoredNamespace } from './core/storage.js';
 import { getDiagnosticsSnapshot, getInstallHelpText, registerServiceWorker } from './core/pwa.js';
 import { resolveInitialTheme, setTheme } from './core/theme.js';
 import { isOverSoftLimit, needsLargeTransferWarning, SOFT_FILE_LIMIT_BYTES } from './bridge/chunks.js';
@@ -378,7 +377,7 @@ export function bootstrapApp({ initialTheme } = {}) {
     if (!transfers.length) {
       refs.transferList.append(createElement('p', {
         className: 'empty-state',
-        text: 'No active transfers yet.',
+        text: 'No transfer history yet.',
       }));
       return;
     }
@@ -590,6 +589,17 @@ export function bootstrapApp({ initialTheme } = {}) {
     showToast('Bridge disconnected.', 'info');
   }
 
+  async function handleClearSession() {
+    const confirmed = window.confirm('Clear the bridge session, transfer history, and received items?');
+    if (!confirmed) {
+      return;
+    }
+
+    await session.disconnect();
+    resetSessionState();
+    showToast('Session cleared.', 'success');
+  }
+
   async function ensureTransferAllowed(file, noun) {
     if (!file) {
       throw new Error(`Choose a ${noun} first.`);
@@ -687,26 +697,24 @@ export function bootstrapApp({ initialTheme } = {}) {
     });
   }
 
-  function resetLocalState() {
+  function resetSessionState() {
     const state = store.getState();
-    revokeRemovedReceivedItems(state.receivedItems, []);
-    clearStoredNamespace();
-    const nextTheme = setTheme(window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    store.update((currentState) => ({
-      ...currentState,
-      theme: nextTheme,
-      receivedItems: [],
-      activeTransfers: [],
-    }));
+    revokeAllObjectUrls();
+    store.setState({
+      ...createInitialState(state.theme),
+      screen: state.screen,
+      diagnostics: {
+        ...state.diagnostics,
+      },
+    });
     refreshDiagnostics({ serviceWorkerReady: state.diagnostics.serviceWorkerReady });
-    showToast('Local preferences and received history were cleared.', 'success');
   }
 
   function buildRefs() {
     return {
       bridgeCode: qs('#bridge-code'),
       codeExpiry: qs('#code-expiry'),
-      clearLocalButton: qs('#clear-local-button'),
+      clearSessionButton: qs('#clear-session-button'),
       clearTextButton: qs('#clear-text-button'),
       closeJoinButton: qs('#close-join-button'),
       composerCards: qsa('[data-composer]'),
@@ -757,7 +765,7 @@ export function bootstrapApp({ initialTheme } = {}) {
   refs.disconnectButton.addEventListener('click', handleDisconnect);
   refs.joinButton.addEventListener('click', handleJoin);
   refs.closeJoinButton.addEventListener('click', () => setJoinSheetOpen(false));
-  qs('#cancel-join-button').addEventListener('click', () => setJoinSheetOpen(false));
+  qs('#cancel-join-button')?.addEventListener('click', () => setJoinSheetOpen(false));
   refs.joinCodeInput.addEventListener('input', (event) => setJoinCode(event.target.value));
   refs.textInput.addEventListener('input', (event) => setTextComposerValue(event.target.value));
   refs.pasteTextButton.addEventListener('click', async () => {
@@ -780,10 +788,8 @@ export function bootstrapApp({ initialTheme } = {}) {
       theme: nextTheme,
     }));
   });
-  refs.clearLocalButton.addEventListener('click', () => {
-    if (window.confirm('Clear the local theme preference and in-memory received history?')) {
-      resetLocalState();
-    }
+  refs.clearSessionButton.addEventListener('click', () => {
+    void handleClearSession();
   });
   refs.receivedList.addEventListener('click', (event) => {
     void handleReceivedAction(event);
