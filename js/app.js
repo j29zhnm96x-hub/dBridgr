@@ -43,6 +43,38 @@ function shouldDisableSend(connectionStatus) {
   return connectionStatus !== 'connected';
 }
 
+function getFirstImageFile(source) {
+  if (!source) {
+    return null;
+  }
+
+  for (const entry of Array.from(source)) {
+    if (entry instanceof File && entry.type.startsWith('image/')) {
+      return entry;
+    }
+
+    if (entry.kind === 'file') {
+      const file = typeof entry.getAsFile === 'function' ? entry.getAsFile() : null;
+      if (file?.type?.startsWith('image/')) {
+        return file;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isTextEntryElement(target) {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || Boolean(target?.isContentEditable);
+}
+
+function clipboardHasPlainText(clipboardData) {
+  return Array.from(clipboardData?.types || []).some((type) => type === 'text/plain' || type === 'text/html');
+}
+
 async function copyTextToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -134,6 +166,13 @@ export function bootstrapApp({ initialTheme } = {}) {
     }));
   }
 
+  function setActiveComposer(activeComposer) {
+    store.update((state) => ({
+      ...state,
+      activeComposer,
+    }));
+  }
+
   function setTextComposerValue(value) {
     store.update((state) => ({
       ...state,
@@ -151,7 +190,7 @@ export function bootstrapApp({ initialTheme } = {}) {
     if (!file) {
       switch (kind) {
         case 'photo':
-          return 'Camera capture support depends on the device browser.';
+          return 'Paste or drag a photo here, or use the camera/library buttons.';
         case 'video':
           return 'Large videos can strain iPhone memory. A warning appears before big transfers.';
         default:
@@ -313,7 +352,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       container.append(createElement('p', {
         className: 'selection-card__empty',
         text: kind === 'photo'
-          ? 'No photo selected yet.'
+          ? 'No photo selected yet. Paste or drop a photo here.'
           : kind === 'video'
             ? 'No video selected yet.'
             : 'No file selected yet.',
@@ -362,7 +401,7 @@ export function bootstrapApp({ initialTheme } = {}) {
     renderSelectionCard(refs.videoSelection, state.composers.video, 'video');
     renderSelectionCard(refs.fileSelection, state.composers.file, 'file');
 
-    refs.photoWarning.textContent = state.composers.photo.warning || 'Camera capture support depends on the device browser.';
+    refs.photoWarning.textContent = state.composers.photo.warning || 'Paste or drag a photo here, or use the camera/library buttons.';
     refs.videoWarning.textContent = state.composers.video.warning || 'Large videos can strain iPhone memory. A warning appears before big transfers.';
     refs.fileWarning.textContent = state.composers.file.warning || 'Files stay peer-to-peer after the session is paired.';
 
@@ -697,6 +736,20 @@ export function bootstrapApp({ initialTheme } = {}) {
     });
   }
 
+  function applyIncomingPhotoFile(file, message) {
+    if (!file) {
+      return false;
+    }
+
+    setScreen('bridge');
+    setActiveComposer('photo');
+    setSelectedFile('photo', file);
+    if (message) {
+      showToast(message, 'success');
+    }
+    return true;
+  }
+
   function resetSessionState() {
     const state = store.getState();
     revokeAllObjectUrls();
@@ -739,6 +792,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       peerNote: qs('#peer-note'),
       photoCameraInput: qs('#photo-camera-input'),
       photoLibraryInput: qs('#photo-library-input'),
+      photoComposer: qs('[data-composer="photo"]'),
       photoSelection: qs('#photo-selection'),
       photoWarning: qs('#photo-warning'),
       receivedList: qs('#received-list'),
@@ -814,11 +868,45 @@ export function bootstrapApp({ initialTheme } = {}) {
 
   refs.composerTabs.forEach((button) => {
     button.addEventListener('click', () => {
-      store.update((state) => ({
-        ...state,
-        activeComposer: button.dataset.composerTarget,
-      }));
+      setActiveComposer(button.dataset.composerTarget);
     });
+  });
+
+  document.addEventListener('paste', (event) => {
+    const clipboardData = event.clipboardData;
+    const imageFile = getFirstImageFile(clipboardData?.items) || getFirstImageFile(clipboardData?.files);
+    if (!imageFile) {
+      return;
+    }
+
+    if (isTextEntryElement(event.target) && clipboardHasPlainText(clipboardData)) {
+      return;
+    }
+
+    event.preventDefault();
+    void applyIncomingPhotoFile(imageFile, 'Photo pasted. Tap Bridge It when ready.');
+  });
+
+  document.addEventListener('dragover', (event) => {
+    const imageFile = getFirstImageFile(event.dataTransfer?.items) || getFirstImageFile(event.dataTransfer?.files);
+    if (!imageFile) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  });
+
+  document.addEventListener('drop', (event) => {
+    const imageFile = getFirstImageFile(event.dataTransfer?.items) || getFirstImageFile(event.dataTransfer?.files);
+    if (!imageFile) {
+      return;
+    }
+
+    event.preventDefault();
+    void applyIncomingPhotoFile(imageFile, 'Photo dropped. Tap Bridge It when ready.');
   });
 
   session.addEventListener('state', (event) => {
