@@ -141,12 +141,30 @@ This repo now includes Cloudflare Pages Functions under `functions/api/session/*
 
 Those Functions require a D1 binding named `DBRIDGR_DB`.
 
+If your app loads but Host/Join shows a message about a missing `DBRIDGR_DB` binding, the frontend is fine and Cloudflare is reaching the Functions. The missing piece is the database binding.
+
 Cloudflare setup steps:
 
 1. Create a D1 database in Cloudflare.
 2. Apply the schema in `d1/schema.sql` to that database.
 3. Open your Pages project settings and add a D1 binding named `DBRIDGR_DB`.
 4. Redeploy the Pages project.
+
+CLI version of the same setup:
+
+```bash
+npx wrangler d1 create dbridgr
+```
+
+Copy the returned database ID into your Pages configuration or dashboard binding.
+
+Then apply the schema remotely:
+
+```bash
+npx wrangler d1 execute dbridgr --remote --file=./d1/schema.sql
+```
+
+If you want to keep the Pages configuration in source control, start from `wrangler.example.jsonc`, fill in your real project name and database identifiers, then save it as `wrangler.jsonc`.
 
 What this fixes:
 

@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dbridgr-pages",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-04-28",
+  "d1_databases": [
+    {
+      "binding": "DBRIDGR_DB",
+      "database_name": "dbridgr",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ]
+}
