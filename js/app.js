@@ -82,6 +82,21 @@ export function bootstrapApp({ initialTheme } = {}) {
   const session = new BridgeSession();
   const refs = buildRefs();
 
+  // Disable double-tap-to-zoom on touch devices (fallback for iOS Safari)
+  if (typeof window !== 'undefined' && 'ontouchstart' in window) {
+    let __dbridgr_lastTouch = 0;
+    document.addEventListener('touchend', function (e) {
+      const now = Date.now();
+      if (now - __dbridgr_lastTouch <= 300) {
+        const tag = e.target && e.target.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !e.target.isContentEditable) {
+          e.preventDefault();
+        }
+      }
+      __dbridgr_lastTouch = now;
+    }, { passive: false });
+  }
+
   function showToast(message, tone = 'info') {
     const toast = createElement('div', {
       className: 'toast',

@@ -1,4 +1,4 @@
-const SW_VERSION = '2026-04-28-3';
+const SW_VERSION = '2026-04-28-4';
 
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
