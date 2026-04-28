@@ -629,14 +629,13 @@ export function bootstrapApp({ initialTheme } = {}) {
   }
 
   async function handleClearSession() {
-    const confirmed = window.confirm('Clear the bridge session, transfer history, and received items?');
+    const confirmed = window.confirm('Clear the transfer history and received items? The bridge connection will stay active.');
     if (!confirmed) {
       return;
     }
 
-    await session.disconnect();
-    resetSessionState();
-    showToast('Session cleared.', 'success');
+    clearHistoryState();
+    showToast('History cleared. The connection stayed active.', 'success');
   }
 
   async function ensureTransferAllowed(file, noun) {
@@ -750,16 +749,14 @@ export function bootstrapApp({ initialTheme } = {}) {
     return true;
   }
 
-  function resetSessionState() {
+  function clearHistoryState() {
     const state = store.getState();
-    revokeAllObjectUrls();
-    store.setState({
-      ...createInitialState(state.theme),
-      screen: state.screen,
-      diagnostics: {
-        ...state.diagnostics,
-      },
-    });
+    revokeRemovedReceivedItems(state.receivedItems, []);
+    store.update((currentState) => ({
+      ...currentState,
+      activeTransfers: [],
+      receivedItems: [],
+    }));
     refreshDiagnostics({ serviceWorkerReady: state.diagnostics.serviceWorkerReady });
   }
 
