@@ -1,10 +1,12 @@
+const SW_VERSION = '2026-04-28-3';
+
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
     return { supported: false, registered: false };
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+    const registration = await navigator.serviceWorker.register(`./sw.js?v=${SW_VERSION}`, { scope: './' });
     return { supported: true, registered: true, registration };
   } catch (error) {
     return { supported: true, registered: false, error };
