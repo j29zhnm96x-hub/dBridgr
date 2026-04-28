@@ -33,6 +33,7 @@ export class SignalingClient extends EventTarget {
     this.pollGeneration = 0;
     this.cursor = 0;
     this.lastStreamErrorAt = 0;
+    this.everPolledSuccessfully = false;
   }
 
   async createSession() {
@@ -52,6 +53,7 @@ export class SignalingClient extends EventTarget {
   connectStream({ code, clientId }) {
     this.close();
     this.cursor = 0;
+    this.everPolledSuccessfully = false;
     this.pollGeneration += 1;
     this.pollController = new AbortController();
     void this.pollLoop({
@@ -80,8 +82,7 @@ export class SignalingClient extends EventTarget {
           return;
         }
 
-        backoffMs = 900;
-        if (typeof payload.cursor === 'number' && payload.cursor >= this.cursor) {
+        backoffMs = 900;        this.everPolledSuccessfully = true;        if (typeof payload.cursor === 'number' && payload.cursor >= this.cursor) {
           this.cursor = payload.cursor;
         }
 
@@ -96,7 +97,9 @@ export class SignalingClient extends EventTarget {
         }
 
         const now = Date.now();
-        if (now - this.lastStreamErrorAt > 4000) {
+        // Only surface errors to the UI once we've had at least one successful poll.
+        // First-time failures (e.g. D1 replication lag, transient network) retry silently.
+        if (this.everPolledSuccessfully && now - this.lastStreamErrorAt > 4000) {
           this.lastStreamErrorAt = now;
           this.dispatchEvent(new CustomEvent('stream-error', {
             detail: {

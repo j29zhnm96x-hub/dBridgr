@@ -183,10 +183,13 @@ export class BridgeSession extends EventTarget {
     }
 
     if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
-      this.setState({
-        status: 'reconnecting',
-        note: 'The peer link dropped. dBridgr is waiting to recover if the browser can reconnect.',
-      });
+      // Only show "reconnecting" if we were previously connected — not during initial setup.
+      if (this.state.status === 'connected') {
+        this.setState({
+          status: 'reconnecting',
+          note: 'The peer link dropped. dBridgr is waiting to recover if the browser can reconnect.',
+        });
+      }
       return;
     }
 
@@ -227,9 +230,14 @@ export class BridgeSession extends EventTarget {
       return;
     }
 
+    // During initial hosting/joining, transient signaling errors are normal — don't alarm the user.
+    if (this.state.status === 'hosting' || this.state.status === 'joining') {
+      return;
+    }
+
     this.setState({
       status: 'reconnecting',
-      note: event.detail.message,
+      note: 'Signaling interrupted. Waiting to reconnect.',
     });
   }
 

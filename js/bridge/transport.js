@@ -159,9 +159,6 @@ export class WebRtcTransport extends EventTarget {
 
   handleSignalingStreamError(event) {
     this.dispatchEvent(new CustomEvent('stream-warning', { detail: event.detail }));
-    if (!this.isOpen()) {
-      this.emitState('reconnecting');
-    }
   }
 
   async createAndSendOffer() {
