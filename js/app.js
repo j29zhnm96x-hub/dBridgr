@@ -75,6 +75,26 @@ function clipboardHasPlainText(clipboardData) {
   return Array.from(clipboardData?.types || []).some((type) => type === 'text/plain' || type === 'text/html');
 }
 
+async function readClipboardImageFile() {
+  if (!navigator.clipboard?.read) {
+    return null;
+  }
+
+  const clipboardItems = await navigator.clipboard.read();
+  for (const item of clipboardItems) {
+    const imageType = item.types.find((type) => type.startsWith('image/'));
+    if (!imageType) {
+      continue;
+    }
+
+    const blob = await item.getType(imageType);
+    const extension = imageType.split('/')[1] || 'png';
+    return new File([blob], `clipboard-image.${extension}`, { type: blob.type || imageType });
+  }
+
+  return null;
+}
+
 async function copyTextToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -190,7 +210,7 @@ export function bootstrapApp({ initialTheme } = {}) {
     if (!file) {
       switch (kind) {
         case 'photo':
-          return 'Paste or drag a photo here, or use the camera/library buttons.';
+          return 'Tap Paste Photo, or use the camera/library buttons.';
         case 'video':
           return 'Large videos can strain iPhone memory. A warning appears before big transfers.';
         default:
@@ -352,7 +372,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       container.append(createElement('p', {
         className: 'selection-card__empty',
         text: kind === 'photo'
-          ? 'No photo selected yet. Paste or drop a photo here.'
+          ? 'No photo selected yet. Tap Paste Photo, take one, or choose from library.'
           : kind === 'video'
             ? 'No video selected yet.'
             : 'No file selected yet.',
@@ -401,7 +421,7 @@ export function bootstrapApp({ initialTheme } = {}) {
     renderSelectionCard(refs.videoSelection, state.composers.video, 'video');
     renderSelectionCard(refs.fileSelection, state.composers.file, 'file');
 
-    refs.photoWarning.textContent = state.composers.photo.warning || 'Paste or drag a photo here, or use the camera/library buttons.';
+    refs.photoWarning.textContent = state.composers.photo.warning || 'Tap Paste Photo, or use the camera/library buttons.';
     refs.videoWarning.textContent = state.composers.video.warning || 'Large videos can strain iPhone memory. A warning appears before big transfers.';
     refs.fileWarning.textContent = state.composers.file.warning || 'Files stay peer-to-peer after the session is paired.';
 
@@ -677,6 +697,20 @@ export function bootstrapApp({ initialTheme } = {}) {
     }
   }
 
+  async function handlePastePhoto() {
+    try {
+      const imageFile = await readClipboardImageFile();
+      if (!imageFile) {
+        showToast('No image was found in the clipboard. Copy a photo first, then tap Paste Photo.', 'error');
+        return;
+      }
+
+      void applyIncomingPhotoFile(imageFile, 'Photo pasted. Tap Bridge It when ready.');
+    } catch (error) {
+      showToast(error?.message || 'Clipboard image paste is not available here.', 'error');
+    }
+  }
+
   async function handleShareItem(item) {
     const shared = await shareBlob({
       blob: item.blob,
@@ -785,6 +819,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       joinSheet: qs('#join-sheet'),
       openJoinButton: qs('#open-join-button'),
       pasteTextButton: qs('#paste-text-button'),
+      pastePhotoButton: qs('#paste-photo-button'),
       peerLabel: qs('#peer-label'),
       peerNote: qs('#peer-note'),
       photoCameraInput: qs('#photo-camera-input'),
@@ -819,6 +854,9 @@ export function bootstrapApp({ initialTheme } = {}) {
   qs('#cancel-join-button')?.addEventListener('click', () => setJoinSheetOpen(false));
   refs.joinCodeInput.addEventListener('input', (event) => setJoinCode(event.target.value));
   refs.textInput.addEventListener('input', (event) => setTextComposerValue(event.target.value));
+  refs.pastePhotoButton.addEventListener('click', () => {
+    void handlePastePhoto();
+  });
   refs.pasteTextButton.addEventListener('click', async () => {
     try {
       const text = await navigator.clipboard.readText();
