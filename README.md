@@ -105,6 +105,12 @@ Then open:
 http://localhost:8787
 ```
 
+Run a quick signaling/API smoke test:
+
+```bash
+npm run smoke:test
+```
+
 For a real device test on the same Wi-Fi:
 
 1. Start the server on your computer.
@@ -176,12 +182,24 @@ What this fixes:
 
 Without that D1 binding, the app shell will load on Cloudflare Pages, but hosting or joining will fail because there is no persistent signaling state behind `/api/*`.
 
+## Release-ready checklist
+
+Before tagging or announcing a deploy:
+
+1. Run `npm run smoke:test` locally.
+2. Push to `main` and wait for Cloudflare Pages to finish deployment.
+3. Verify `POST /api/session` returns 201 on the live site.
+4. Verify one full host/join pairing on two separate browser contexts.
+5. Confirm no user-facing error toast appears during successful pairing.
+6. Confirm send/receive works for at least one text transfer and one file transfer.
+7. If iOS home-screen users are affected, verify update pickup by opening the site once in Safari before retesting the installed app.
+
 ## iPhone and browser caveats
 
 These are real browser limits, not app bugs:
 
 - WebRTC usually works best on the same Wi-Fi, but some networks still block or degrade peer connectivity.
-- The app includes STUN, not TURN. Extremely restrictive networks can still fail.
+- The app includes STUN plus TURN fallback, but extremely restrictive networks can still fail or degrade due relay/network policy constraints.
 - Large video or file transfers can hit iOS memory pressure.
 - Camera and video capture through file inputs are best-effort and depend on the browser.
 - iOS Safari install flow uses Share -> Add to Home Screen. It does not support the full Chromium `beforeinstallprompt` flow.

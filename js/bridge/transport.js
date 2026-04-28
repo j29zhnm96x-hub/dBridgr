@@ -43,7 +43,6 @@ export class WebRtcTransport extends EventTarget {
     this.sessionInfo = null;
     this.role = null;
     this.negotiationStarted = false;
-    this.lastOfferSentAt = 0;
     this.offerStuckTimer = null;
     this.lastReadySignalAt = 0;
     this.restartingHost = false;
@@ -114,7 +113,7 @@ export class WebRtcTransport extends EventTarget {
 
       if (this.peerConnection.iceConnectionState === 'failed') {
         if (this.role === 'host' && !this.isOpen()) {
-          void this.restartHostNegotiation('ice-failed');
+          void this.restartHostNegotiation();
           return;
         }
 
@@ -225,13 +224,12 @@ export class WebRtcTransport extends EventTarget {
         'offer',
         this.peerConnection.localDescription || offer
       );
-      this.lastOfferSentAt = Date.now();
       this.armOfferStuckTimer();
     } catch (error) {
       this.negotiationStarted = false;
       const message = describeError(error, 'Could not create the connection offer.');
       if (this.role === 'host' && /m-lines/i.test(message)) {
-        await this.restartHostNegotiation('offer-shape-mismatch');
+        await this.restartHostNegotiation();
         return;
       }
       this.reportError(error, 'Could not create the connection offer.');
@@ -302,7 +300,7 @@ export class WebRtcTransport extends EventTarget {
 
       // If answer never arrived, rebuild and retry from a fresh RTCPeerConnection.
       if (!this.peerConnection.currentRemoteDescription) {
-        void this.restartHostNegotiation('offer-timeout');
+        void this.restartHostNegotiation();
       }
     }, OFFER_STUCK_TIMEOUT_MS);
   }
@@ -326,7 +324,7 @@ export class WebRtcTransport extends EventTarget {
     }
   }
 
-  async restartHostNegotiation(_reason) {
+  async restartHostNegotiation() {
     if (!this.sessionInfo || this.role !== 'host' || this.restartingHost) {
       return;
     }
@@ -334,7 +332,6 @@ export class WebRtcTransport extends EventTarget {
     this.restartingHost = true;
     this.clearOfferStuckTimer();
     this.negotiationStarted = false;
-    this.lastOfferSentAt = 0;
     this.pendingRemoteCandidates = [];
 
     try {
@@ -431,7 +428,6 @@ export class WebRtcTransport extends EventTarget {
     }
 
     this.negotiationStarted = false;
-    this.lastOfferSentAt = 0;
     this.lastReadySignalAt = 0;
     this.restartingHost = false;
     this.pendingRemoteCandidates = [];

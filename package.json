@@ -4,7 +4,8 @@
   "private": true,
   "description": "Mobile-first peer-to-peer bridge for text, media, and files.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "smoke:test": "node scripts/smoke-test.js"
   },
   "engines": {
     "node": ">=18"
