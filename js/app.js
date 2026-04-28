@@ -95,6 +95,27 @@ async function readClipboardImageFile() {
   return null;
 }
 
+async function readClipboardFile() {
+  if (!navigator.clipboard?.read) {
+    return null;
+  }
+
+  const clipboardItems = await navigator.clipboard.read();
+  for (const item of clipboardItems) {
+    const fileType = item.types.find((type) => !type.startsWith('text/'));
+    if (!fileType) {
+      continue;
+    }
+
+    const blob = await item.getType(fileType);
+    const subtype = fileType.split('/')[1] || 'bin';
+    const extension = /^[a-z0-9-]+$/i.test(subtype) && subtype.length <= 12 ? subtype : 'bin';
+    return new File([blob], `clipboard-file.${extension}`, { type: blob.type || fileType });
+  }
+
+  return null;
+}
+
 async function copyTextToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -132,6 +153,7 @@ export function bootstrapApp({ initialTheme } = {}) {
   const store = createStore(createInitialState(initialTheme || resolveInitialTheme()));
   const session = new BridgeSession();
   const refs = buildRefs();
+  let photoPreviewRestoreFocus = null;
 
   // Disable double-tap-to-zoom on touch devices (fallback for iOS Safari)
   if (typeof window !== 'undefined' && 'ontouchstart' in window) {
@@ -259,6 +281,33 @@ export function bootstrapApp({ initialTheme } = {}) {
     }));
   }
 
+  function openPhotoPreview(item, triggerElement) {
+    if (!item || item.kind !== 'photo' || !item.objectUrl) {
+      return;
+    }
+
+    photoPreviewRestoreFocus = triggerElement instanceof HTMLElement ? triggerElement : null;
+    refs.photoPreviewTitle.textContent = item.name || 'Photo preview';
+    refs.photoPreviewImage.alt = item.name || 'Previewed photo';
+    refs.photoPreviewImage.src = item.objectUrl;
+    refs.photoPreviewMeta.textContent = `${formatBytes(item.size)} • ${item.mimeType || 'image/*'} • Received ${formatClockTime(item.receivedAt)}`;
+    refs.photoPreviewBackdrop.hidden = false;
+    window.setTimeout(() => refs.closePhotoPreviewButton.focus(), 0);
+  }
+
+  function closePhotoPreview(restoreFocus = true) {
+    refs.photoPreviewImage.removeAttribute('src');
+    refs.photoPreviewImage.alt = '';
+    refs.photoPreviewMeta.textContent = '';
+    refs.photoPreviewBackdrop.hidden = true;
+
+    const restoreTarget = photoPreviewRestoreFocus;
+    photoPreviewRestoreFocus = null;
+    if (restoreFocus && restoreTarget instanceof HTMLElement) {
+      window.setTimeout(() => restoreTarget.focus(), 0);
+    }
+  }
+
   function setConnectionState(connectionPatch) {
     store.update((state) => ({
       ...state,
@@ -375,7 +424,7 @@ export function bootstrapApp({ initialTheme } = {}) {
           ? 'No photo selected yet. Tap Paste Photo, take one, or choose from library.'
           : kind === 'video'
             ? 'No video selected yet.'
-            : 'No file selected yet.',
+            : 'No file selected yet. Tap Paste File or choose a file.',
       }));
       return;
     }
@@ -500,13 +549,24 @@ export function bootstrapApp({ initialTheme } = {}) {
     }
 
     if (item.kind === 'photo') {
-      card.append(createElement('img', {
+      const previewButton = createElement('button', {
+        className: 'received-card__media-button',
+        attributes: {
+          'aria-label': `Preview ${item.name}`,
+          'data-action': 'preview-photo',
+          'data-item-id': item.id,
+          title: 'Open photo preview',
+          type: 'button',
+        },
+      });
+      previewButton.append(createElement('img', {
         className: 'received-card__media',
         attributes: {
           alt: item.name,
           src: item.objectUrl,
         },
       }));
+      card.append(previewButton);
     }
 
     if (item.kind === 'video') {
@@ -649,13 +709,13 @@ export function bootstrapApp({ initialTheme } = {}) {
   }
 
   async function handleClearSession() {
-    const confirmed = window.confirm('Clear the transfer history and received items? The bridge connection will stay active.');
+    const confirmed = window.confirm('Clear all sent and received data? This erases transfer history, current drafts, and selected media while keeping the bridge connection active.');
     if (!confirmed) {
       return;
     }
 
     clearHistoryState();
-    showToast('History cleared. The connection stayed active.', 'success');
+    showToast('All sent and received data cleared.', 'success');
   }
 
   async function ensureTransferAllowed(file, noun) {
@@ -711,6 +771,23 @@ export function bootstrapApp({ initialTheme } = {}) {
     }
   }
 
+  async function handlePasteFile() {
+    try {
+      const file = await readClipboardFile();
+      if (!file) {
+        showToast('No file was found in the clipboard. Copy a file first, then tap Paste File.', 'error');
+        return;
+      }
+
+      setScreen('bridge');
+      setActiveComposer('file');
+      setSelectedFile('file', file);
+      showToast('File pasted. Tap Bridge It when ready.', 'success');
+    } catch (error) {
+      showToast(error?.message || 'Clipboard file paste is not available here.', 'error');
+    }
+  }
+
   async function handleShareItem(item) {
     const shared = await shareBlob({
       blob: item.blob,
@@ -750,6 +827,11 @@ export function bootstrapApp({ initialTheme } = {}) {
       return;
     }
 
+    if (actionTarget.dataset.action === 'preview-photo') {
+      openPhotoPreview(item, actionTarget);
+      return;
+    }
+
     if (actionTarget.dataset.action === 'download-item') {
       const filename = item.kind === 'text' ? buildTextDownloadName() : item.name;
       downloadBlob(item.blob, filename);
@@ -785,7 +867,17 @@ export function bootstrapApp({ initialTheme } = {}) {
 
   function clearHistoryState() {
     const state = store.getState();
+    closePhotoPreview(false);
     revokeRemovedReceivedItems(state.receivedItems, []);
+    setTextComposerValue('');
+    setSelectedFile('photo', null);
+    setSelectedFile('video', null);
+    setSelectedFile('file', null);
+    refs.photoCameraInput.value = '';
+    refs.photoLibraryInput.value = '';
+    refs.videoCameraInput.value = '';
+    refs.videoLibraryInput.value = '';
+    refs.genericFileInput.value = '';
     store.update((currentState) => ({
       ...currentState,
       activeTransfers: [],
@@ -824,12 +916,17 @@ export function bootstrapApp({ initialTheme } = {}) {
       peerNote: qs('#peer-note'),
       photoCameraInput: qs('#photo-camera-input'),
       photoLibraryInput: qs('#photo-library-input'),
+      photoPreviewBackdrop: qs('#photo-preview-backdrop'),
+      photoPreviewImage: qs('#photo-preview-image'),
+      photoPreviewMeta: qs('#photo-preview-meta'),
+      photoPreviewTitle: qs('#photo-preview-title'),
       photoComposer: qs('[data-composer="photo"]'),
       photoSelection: qs('#photo-selection'),
       photoWarning: qs('#photo-warning'),
       receivedList: qs('#received-list'),
       screens: qsa('[data-screen]'),
       screenNavButtons: qsa('[data-screen-target]'),
+      pasteFileButton: qs('#paste-file-button'),
       sendFileButton: qs('#send-file-button'),
       sendPhotoButton: qs('#send-photo-button'),
       sendTextButton: qs('#send-text-button'),
@@ -837,6 +934,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       textInput: qs('#text-input'),
       themeToggle: qs('#theme-toggle'),
       themeToggleLabel: qs('#theme-toggle-label'),
+      closePhotoPreviewButton: qs('#close-photo-preview-button'),
       toastRegion: qs('#toast-region'),
       transferList: qs('#transfer-list'),
       videoCameraInput: qs('#video-camera-input'),
@@ -854,8 +952,22 @@ export function bootstrapApp({ initialTheme } = {}) {
   qs('#cancel-join-button')?.addEventListener('click', () => setJoinSheetOpen(false));
   refs.joinCodeInput.addEventListener('input', (event) => setJoinCode(event.target.value));
   refs.textInput.addEventListener('input', (event) => setTextComposerValue(event.target.value));
+  refs.closePhotoPreviewButton.addEventListener('click', () => closePhotoPreview());
+  refs.photoPreviewBackdrop.addEventListener('click', (event) => {
+    if (event.target === refs.photoPreviewBackdrop) {
+      closePhotoPreview();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !refs.photoPreviewBackdrop.hidden) {
+      closePhotoPreview();
+    }
+  });
   refs.pastePhotoButton.addEventListener('click', () => {
     void handlePastePhoto();
+  });
+  refs.pasteFileButton.addEventListener('click', () => {
+    void handlePasteFile();
   });
   refs.pasteTextButton.addEventListener('click', async () => {
     try {

@@ -108,8 +108,9 @@
 
                 <article class="composer-card" data-composer="file">
                   <label class="field-label">Any file</label>
-                  <div class="picker-row picker-row--single">
+                  <div class="picker-row">
                     <input class="visually-hidden" type="file" id="generic-file-input" aria-label="Choose a file" title="Choose a file">
+                    <button class="button button--secondary" type="button" id="paste-file-button">Paste File</button>
                     <button class="button button--secondary" type="button" data-open-input="generic-file-input">Choose File</button>
                   </div>
                   <div class="selection-card" id="file-selection">
@@ -245,6 +246,22 @@
     </section>
   </div>
 
+  <div class="preview-backdrop" id="photo-preview-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="photo-preview-title" aria-describedby="photo-preview-meta">
+    <section class="preview-sheet">
+      <div class="preview-sheet__header">
+        <div>
+          <p class="eyebrow">Photo preview</p>
+          <h2 id="photo-preview-title">Preview</h2>
+        </div>
+        <button class="icon-button" type="button" id="close-photo-preview-button" aria-label="Close photo preview">×</button>
+      </div>
+      <div class="preview-sheet__stage">
+        <img class="preview-sheet__media" id="photo-preview-image" alt="">
+      </div>
+      <p class="preview-sheet__meta" id="photo-preview-meta"></p>
+    </section>
+  </div>
+
   <section class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></section>
 
   <noscript>
@@ -253,6 +270,6 @@
     </section>
   </noscript>
 
-  <script type="module" src="./js/main.js?v=2026-04-28-5"></script>
+  <script type="module" src="./js/main.js?v=2026-04-28-8"></script>
 </body>
 </html>
