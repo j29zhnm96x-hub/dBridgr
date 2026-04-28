@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dbridgr-shell-v2';
+const CACHE_NAME = 'dbridgr-shell-v3';
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -68,15 +68,12 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         const clonedResponse = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clonedResponse));
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
