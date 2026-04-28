@@ -1,0 +1,8 @@
+name = "dbridgr-pages"
+pages_build_output_dir = "."
+compatibility_date = "2026-04-28"
+
+[[d1_databases]]
+binding = "DBRIDGR_DB"
+database_name = "dbridgr"
+database_id = "7c3377a7-305d-44ac-b302-966e5988ceed"
