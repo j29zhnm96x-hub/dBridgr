@@ -239,6 +239,14 @@ export class BridgeSession extends EventTarget {
       return;
     }
 
+    // If signaling recovered after a transient error, return to the active state.
+    if (this.state.status === 'reconnecting') {
+      this.setState({
+        status: this.state.role === 'host' ? 'hosting' : 'joining',
+        note: 'Signaling recovered. Waiting for the peer-to-peer channel.',
+      });
+    }
+
     if (this.state.role === 'host') {
       this.setState({
         peerPresent: detail.peerPresent,

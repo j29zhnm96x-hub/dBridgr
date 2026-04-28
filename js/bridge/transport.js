@@ -67,6 +67,9 @@ export class WebRtcTransport extends EventTarget {
     };
 
     this.peerConnection.onconnectionstatechange = () => {
+      if (!this.peerConnection) {
+        return;
+      }
       const connectionState = this.peerConnection.connectionState || 'new';
       if (connectionState === 'connected' && !this.isOpen()) {
         this.emitState('connecting');
@@ -119,6 +122,7 @@ export class WebRtcTransport extends EventTarget {
   async handleSignalingMessage(event) {
     const payload = event.detail;
 
+    try {
     switch (payload.type) {
       case 'ready':
         return;
@@ -147,6 +151,9 @@ export class WebRtcTransport extends EventTarget {
         return;
       default:
         return;
+    }
+    } catch (error) {
+      this.reportError(error, 'Failed to process a signaling message.');
     }
   }
 

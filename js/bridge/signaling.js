@@ -63,7 +63,7 @@ export class SignalingClient extends EventTarget {
   }
 
   async pollLoop({ code, clientId, generation, signal }) {
-    let backoffMs = 900;
+    let backoffMs = 500;
 
     while (!signal.aborted && generation === this.pollGeneration) {
       try {
@@ -89,7 +89,7 @@ export class SignalingClient extends EventTarget {
           this.dispatchEvent(new CustomEvent('message', { detail: event }));
         }
 
-        await wait(payload.retryAfterMs ?? 900);
+        await wait(payload.retryAfterMs ?? 500);
       } catch (error) {
         if (signal.aborted || generation !== this.pollGeneration) {
           return;

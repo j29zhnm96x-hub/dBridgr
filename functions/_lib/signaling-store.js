@@ -1,7 +1,7 @@
 const SESSION_TTL_MS = 5 * 60 * 1000;
 const SESSION_END_GRACE_MS = 60 * 1000;
 const STREAM_ACTIVITY_TTL_MS = 15 * 1000;
-const POLL_RETRY_MS = 900;
+const POLL_RETRY_MS = 500;
 const DB_BINDING = 'DBRIDGR_DB';
 
 function corsHeaders(extra = {}) {
