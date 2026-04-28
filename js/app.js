@@ -419,6 +419,9 @@ export function bootstrapApp({ initialTheme } = {}) {
 
     if (item.kind === 'text') {
       const body = createElement('div', { className: 'received-text' });
+      body.setAttribute('tabindex', '0');
+      body.setAttribute('role', 'textbox');
+      body.setAttribute('aria-readonly', 'true');
       body.textContent = item.text;
       card.append(body);
     }

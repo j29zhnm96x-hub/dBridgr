@@ -60,6 +60,7 @@ html[data-theme="dark"] {
 html {
   min-height: 100%;
   scroll-behavior: smooth;
+  touch-action: manipulation;
 }
 
 body {
@@ -73,6 +74,10 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 30%),
     var(--bg);
   padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 body::before {
@@ -111,6 +116,20 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+button,
+input,
+textarea,
+.received-text {
+  touch-action: manipulation;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button {
@@ -592,24 +611,52 @@ html[data-theme="dark"] .settings-card {
 }
 
 .received-card--text {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   color: #161617;
+}
+
+html[data-theme="dark"] .received-card--text {
+  background: rgba(24, 30, 41, 0.9);
+  color: var(--text);
 }
 
 .received-card--text .button--ghost,
 .received-card--text .button--secondary {
-  color: #161617;
+  color: currentColor;
   border-color: rgba(22, 22, 23, 0.14);
 }
 
+html[data-theme="dark"] .received-card--text .button--ghost,
+html[data-theme="dark"] .received-card--text .button--secondary {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
 .received-text {
-  max-height: 16rem;
-  overflow: auto;
+  min-height: 8rem;
   padding: 1rem;
   border-radius: 16px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
   background: rgba(17, 17, 17, 0.04);
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1.58;
+  overflow: visible;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+  cursor: text;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+html[data-theme="dark"] .received-text {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.received-text:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 4px;
 }
 
 .received-card__media {
