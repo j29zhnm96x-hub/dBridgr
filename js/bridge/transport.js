@@ -2,6 +2,7 @@ import { BUFFER_LOW_WATER_MARK } from './chunks.js';
 
 const OFFER_STUCK_TIMEOUT_MS = 9000;
 const READY_SIGNAL_COOLDOWN_MS = 1500;
+const RECONNECT_DELAY_MS = 800;
 
 const DEFAULT_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -46,6 +47,9 @@ export class WebRtcTransport extends EventTarget {
     this.offerStuckTimer = null;
     this.lastReadySignalAt = 0;
     this.restartingHost = false;
+    this.reconnecting = false;
+    this.disconnecting = false;
+    this.reconnectTimer = null;
     this.pendingRemoteCandidates = [];
 
     this.handleSignalingMessage = this.handleSignalingMessage.bind(this);
@@ -99,6 +103,12 @@ export class WebRtcTransport extends EventTarget {
         return;
       }
       const connectionState = this.peerConnection.connectionState || 'new';
+      if (connectionState === 'disconnected' || connectionState === 'failed' || connectionState === 'closed') {
+        if (!this.disconnecting && this.sessionInfo) {
+          void this.scheduleReconnect();
+          return;
+        }
+      }
       if (connectionState === 'connected' && !this.isOpen()) {
         this.emitState('connecting');
         return;
@@ -111,13 +121,10 @@ export class WebRtcTransport extends EventTarget {
         return;
       }
 
-      if (this.peerConnection.iceConnectionState === 'failed') {
-        if (this.role === 'host' && !this.isOpen()) {
-          void this.restartHostNegotiation();
-          return;
-        }
-
-        this.reportError(new Error('The peer connection failed.'), 'The peer connection failed.');
+      const iceState = this.peerConnection.iceConnectionState;
+      if ((iceState === 'failed' || iceState === 'disconnected') && this.sessionInfo && !this.disconnecting) {
+        void this.scheduleReconnect();
+        return;
       }
     };
   }
@@ -139,12 +146,16 @@ export class WebRtcTransport extends EventTarget {
 
     this.dataChannel.onopen = () => {
       this.clearOfferStuckTimer();
+      this.reconnecting = false;
       this.dispatchEvent(new CustomEvent('open'));
       this.emitState('connected');
     };
 
     this.dataChannel.onclose = () => {
       this.dispatchEvent(new CustomEvent('closed'));
+      if (this.sessionInfo && !this.disconnecting) {
+        this.emitState('reconnecting');
+      }
       this.emitState(this.peerConnection?.connectionState || 'closed');
     };
 
@@ -229,7 +240,7 @@ export class WebRtcTransport extends EventTarget {
       this.negotiationStarted = false;
       const message = describeError(error, 'Could not create the connection offer.');
       if (this.role === 'host' && /m-lines/i.test(message)) {
-        await this.restartHostNegotiation();
+        await this.restartConnection();
         return;
       }
       this.reportError(error, 'Could not create the connection offer.');
@@ -291,6 +302,24 @@ export class WebRtcTransport extends EventTarget {
     }
   }
 
+  async scheduleReconnect() {
+    if (!this.sessionInfo || this.disconnecting) {
+      return;
+    }
+
+    this.reconnecting = true;
+    this.emitState('reconnecting');
+
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+    }
+
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.restartConnection();
+    }, RECONNECT_DELAY_MS);
+  }
+
   armOfferStuckTimer() {
     this.clearOfferStuckTimer();
     this.offerStuckTimer = window.setTimeout(() => {
@@ -324,15 +353,21 @@ export class WebRtcTransport extends EventTarget {
     }
   }
 
-  async restartHostNegotiation() {
-    if (!this.sessionInfo || this.role !== 'host' || this.restartingHost) {
+  async restartConnection() {
+    if (!this.sessionInfo || this.disconnecting || this.restartingHost) {
       return;
     }
 
     this.restartingHost = true;
+    this.reconnecting = false;
     this.clearOfferStuckTimer();
     this.negotiationStarted = false;
     this.pendingRemoteCandidates = [];
+
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     try {
       if (this.dataChannel) {
@@ -346,11 +381,20 @@ export class WebRtcTransport extends EventTarget {
       }
 
       this.createPeerConnection();
-      const dataChannel = this.peerConnection.createDataChannel('dbridgr', {
-        ordered: true,
-      });
-      this.setupDataChannel(dataChannel);
-      await this.createAndSendOffer();
+
+      if (this.role === 'host') {
+        const dataChannel = this.peerConnection.createDataChannel('dbridgr', {
+          ordered: true,
+        });
+        this.setupDataChannel(dataChannel);
+        await this.createAndSendOffer();
+        return;
+      }
+
+      this.peerConnection.ondatachannel = (event) => {
+        this.setupDataChannel(event.channel);
+      };
+      await this.sendReadySignal(true);
     } finally {
       this.restartingHost = false;
     }
@@ -414,6 +458,12 @@ export class WebRtcTransport extends EventTarget {
 
   async disconnect() {
     this.clearOfferStuckTimer();
+    this.disconnecting = true;
+    this.reconnecting = false;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.unbindSignaling();
     this.signaling.close();
 
@@ -430,6 +480,7 @@ export class WebRtcTransport extends EventTarget {
     this.negotiationStarted = false;
     this.lastReadySignalAt = 0;
     this.restartingHost = false;
+    this.disconnecting = false;
     this.pendingRemoteCandidates = [];
     this.sessionInfo = null;
     this.role = null;

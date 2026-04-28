@@ -182,14 +182,12 @@ export class BridgeSession extends EventTarget {
       return;
     }
 
-    if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
-      // Only show "reconnecting" if we were previously connected — not during initial setup.
-      if (this.state.status === 'connected') {
-        this.setState({
-          status: 'reconnecting',
-          note: 'The peer link dropped. dBridgr is waiting to recover if the browser can reconnect.',
-        });
-      }
+    if (connectionState === 'disconnected' || connectionState === 'reconnecting' || connectionState === 'closed' || connectionState === 'failed') {
+      this.setState({
+        status: 'reconnecting',
+        note: 'The bridge is trying to restore the connection. It will stay active until either device disconnects.',
+        error: '',
+      });
       return;
     }
 
@@ -201,21 +199,23 @@ export class BridgeSession extends EventTarget {
       return;
     }
 
-    if (connectionState === 'failed') {
-      this.setState({
-        status: 'error',
-        error: 'The bridge connection failed.',
-        note: 'Disconnect and retry pairing. Some networks block or degrade peer connectivity.',
-      });
-      return;
-    }
-
     if (connectionState === 'hosting' || connectionState === 'joining') {
       this.setState({ status: connectionState });
     }
   }
 
   handleTransportError(event) {
+    if (this.sessionInfo) {
+      const noticeMessage = event.detail.message || 'The bridge is trying to restore the connection.';
+      this.setState({
+        status: 'reconnecting',
+        error: '',
+        note: noticeMessage,
+      });
+      this.emitNotice(noticeMessage, 'info');
+      return;
+    }
+
     this.setState({
       status: 'error',
       error: event.detail.message,
