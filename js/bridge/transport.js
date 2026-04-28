@@ -154,7 +154,7 @@ export class WebRtcTransport extends EventTarget {
     try {
       switch (payload.type) {
       case 'ready': {
-        if (this.role === 'host' && !this.isOpen()) {
+        if (this.needsInitialOffer()) {
           this.negotiationStarted = false;
           await this.createAndSendOffer({ iceRestart: this.lastOfferSentAt > 0 });
         }
@@ -167,7 +167,7 @@ export class WebRtcTransport extends EventTarget {
             peerPresent: this.role === 'host' ? payload.guestPresent : payload.hostPresent,
           },
         }));
-        if (this.role === 'host' && payload.guestPresent && !this.negotiationStarted) {
+        if (payload.guestPresent && this.needsInitialOffer() && !this.negotiationStarted) {
           await this.createAndSendOffer();
         }
         if (this.role === 'guest' && payload.hostPresent && !this.isOpen()) {
@@ -210,7 +210,12 @@ export class WebRtcTransport extends EventTarget {
     try {
       const offer = await this.peerConnection.createOffer(options);
       await this.peerConnection.setLocalDescription(offer);
-      await this.signaling.send(this.sessionInfo.code, this.sessionInfo.clientId, 'offer', offer);
+      await this.signaling.send(
+        this.sessionInfo.code,
+        this.sessionInfo.clientId,
+        'offer',
+        this.peerConnection.localDescription || offer
+      );
       this.lastOfferSentAt = Date.now();
     } catch (error) {
       this.negotiationStarted = false;
@@ -224,7 +229,7 @@ export class WebRtcTransport extends EventTarget {
     }
 
     try {
-      if (this.peerConnection.signalingState !== 'stable') {
+      if (this.peerConnection.signalingState === 'have-local-offer') {
         await this.peerConnection.setLocalDescription({ type: 'rollback' });
       }
       await this.peerConnection.setRemoteDescription(offer);
@@ -272,16 +277,30 @@ export class WebRtcTransport extends EventTarget {
         return;
       }
 
-      if (this.peerConnection.currentRemoteDescription) {
+      const canRetryInitialOffer = !this.peerConnection.currentRemoteDescription;
+      const canRetryAfterIceFailure = Boolean(this.peerConnection.currentRemoteDescription)
+        && (this.peerConnection.connectionState === 'failed' || this.peerConnection.iceConnectionState === 'failed');
+
+      if (!canRetryInitialOffer && !canRetryAfterIceFailure) {
         return;
       }
 
       const offerAge = this.lastOfferSentAt ? Date.now() - this.lastOfferSentAt : Number.POSITIVE_INFINITY;
       if (!this.negotiationStarted || offerAge >= OFFER_RETRY_MAX_AGE_MS) {
         this.negotiationStarted = false;
-        void this.createAndSendOffer({ iceRestart: this.lastOfferSentAt > 0 });
+        void this.createAndSendOffer({ iceRestart: canRetryAfterIceFailure || this.lastOfferSentAt > 0 });
       }
     }, OFFER_RETRY_CHECK_MS);
+  }
+
+  needsInitialOffer() {
+    return Boolean(
+      this.role === 'host'
+      && this.peerConnection
+      && this.sessionInfo
+      && !this.isOpen()
+      && !this.peerConnection.currentRemoteDescription
+    );
   }
 
   stopOfferRetryLoop() {
