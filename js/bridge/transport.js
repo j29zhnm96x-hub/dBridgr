@@ -1,5 +1,8 @@
 import { BUFFER_LOW_WATER_MARK } from './chunks.js';
 
+const OFFER_RETRY_CHECK_MS = 1500;
+const OFFER_RETRY_MAX_AGE_MS = 7000;
+
 const DEFAULT_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -40,6 +43,8 @@ export class WebRtcTransport extends EventTarget {
     this.sessionInfo = null;
     this.role = null;
     this.negotiationStarted = false;
+    this.lastOfferSentAt = 0;
+    this.offerRetryTimer = null;
     this.pendingRemoteCandidates = [];
 
     this.handleSignalingMessage = this.handleSignalingMessage.bind(this);
@@ -57,6 +62,7 @@ export class WebRtcTransport extends EventTarget {
     });
     this.setupDataChannel(dataChannel);
     this.signaling.connectStream(this.sessionInfo);
+    this.startOfferRetryLoop();
     this.emitState('hosting');
   }
 
@@ -71,6 +77,7 @@ export class WebRtcTransport extends EventTarget {
     };
 
     this.signaling.connectStream(this.sessionInfo);
+    void this.sendReadySignal();
     this.emitState('joining');
   }
 
@@ -122,6 +129,7 @@ export class WebRtcTransport extends EventTarget {
     this.dataChannel.bufferedAmountLowThreshold = BUFFER_LOW_WATER_MARK;
 
     this.dataChannel.onopen = () => {
+      this.stopOfferRetryLoop();
       this.dispatchEvent(new CustomEvent('open'));
       this.emitState('connected');
     };
@@ -144,9 +152,14 @@ export class WebRtcTransport extends EventTarget {
     const payload = event.detail;
 
     try {
-    switch (payload.type) {
-      case 'ready':
+      switch (payload.type) {
+      case 'ready': {
+        if (this.role === 'host' && !this.isOpen()) {
+          this.negotiationStarted = false;
+          await this.createAndSendOffer({ iceRestart: this.lastOfferSentAt > 0 });
+        }
         return;
+      }
       case 'peer-state':
         this.dispatchEvent(new CustomEvent('peer-state', {
           detail: {
@@ -156,6 +169,9 @@ export class WebRtcTransport extends EventTarget {
         }));
         if (this.role === 'host' && payload.guestPresent && !this.negotiationStarted) {
           await this.createAndSendOffer();
+        }
+        if (this.role === 'guest' && payload.hostPresent && !this.isOpen()) {
+          void this.sendReadySignal();
         }
         return;
       case 'offer':
@@ -172,7 +188,7 @@ export class WebRtcTransport extends EventTarget {
         return;
       default:
         return;
-    }
+      }
     } catch (error) {
       this.reportError(error, 'Failed to process a signaling message.');
     }
@@ -182,16 +198,20 @@ export class WebRtcTransport extends EventTarget {
     this.dispatchEvent(new CustomEvent('stream-warning', { detail: event.detail }));
   }
 
-  async createAndSendOffer() {
+  async createAndSendOffer(options = {}) {
     if (!this.peerConnection || !this.sessionInfo || this.negotiationStarted) {
+      return;
+    }
+    if (this.peerConnection.signalingState !== 'stable') {
       return;
     }
 
     this.negotiationStarted = true;
     try {
-      const offer = await this.peerConnection.createOffer();
+      const offer = await this.peerConnection.createOffer(options);
       await this.peerConnection.setLocalDescription(offer);
       await this.signaling.send(this.sessionInfo.code, this.sessionInfo.clientId, 'offer', offer);
+      this.lastOfferSentAt = Date.now();
     } catch (error) {
       this.negotiationStarted = false;
       this.reportError(error, 'Could not create the connection offer.');
@@ -204,6 +224,9 @@ export class WebRtcTransport extends EventTarget {
     }
 
     try {
+      if (this.peerConnection.signalingState !== 'stable') {
+        await this.peerConnection.setLocalDescription({ type: 'rollback' });
+      }
       await this.peerConnection.setRemoteDescription(offer);
       await this.flushPendingRemoteCandidates();
       const answer = await this.peerConnection.createAnswer();
@@ -222,8 +245,49 @@ export class WebRtcTransport extends EventTarget {
     try {
       await this.peerConnection.setRemoteDescription(answer);
       await this.flushPendingRemoteCandidates();
+      this.negotiationStarted = false;
     } catch (error) {
       this.reportError(error, 'Could not finalize the bridge connection.');
+    }
+  }
+
+  async sendReadySignal() {
+    if (!this.sessionInfo || this.role !== 'guest') {
+      return;
+    }
+
+    try {
+      await this.signaling.send(this.sessionInfo.code, this.sessionInfo.clientId, 'ready', {
+        at: Date.now(),
+      });
+    } catch {
+      // Ready ping is best effort; polling will retry naturally.
+    }
+  }
+
+  startOfferRetryLoop() {
+    this.stopOfferRetryLoop();
+    this.offerRetryTimer = window.setInterval(() => {
+      if (!this.peerConnection || !this.sessionInfo || this.role !== 'host' || this.isOpen()) {
+        return;
+      }
+
+      if (this.peerConnection.currentRemoteDescription) {
+        return;
+      }
+
+      const offerAge = this.lastOfferSentAt ? Date.now() - this.lastOfferSentAt : Number.POSITIVE_INFINITY;
+      if (!this.negotiationStarted || offerAge >= OFFER_RETRY_MAX_AGE_MS) {
+        this.negotiationStarted = false;
+        void this.createAndSendOffer({ iceRestart: this.lastOfferSentAt > 0 });
+      }
+    }, OFFER_RETRY_CHECK_MS);
+  }
+
+  stopOfferRetryLoop() {
+    if (this.offerRetryTimer !== null) {
+      window.clearInterval(this.offerRetryTimer);
+      this.offerRetryTimer = null;
     }
   }
 
@@ -284,6 +348,7 @@ export class WebRtcTransport extends EventTarget {
   }
 
   async disconnect() {
+    this.stopOfferRetryLoop();
     this.unbindSignaling();
     this.signaling.close();
 
@@ -298,6 +363,7 @@ export class WebRtcTransport extends EventTarget {
     }
 
     this.negotiationStarted = false;
+    this.lastOfferSentAt = 0;
     this.pendingRemoteCandidates = [];
     this.sessionInfo = null;
     this.role = null;
