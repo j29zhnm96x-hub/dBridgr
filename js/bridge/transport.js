@@ -51,6 +51,7 @@ export class WebRtcTransport extends EventTarget {
     this.disconnecting = false;
     this.reconnectTimer = null;
     this.pendingRemoteCandidates = [];
+    this.connectionStartedAt = 0;
 
     this.handleSignalingMessage = this.handleSignalingMessage.bind(this);
     this.handleSignalingStreamError = this.handleSignalingStreamError.bind(this);
@@ -60,6 +61,7 @@ export class WebRtcTransport extends EventTarget {
     this.sessionInfo = { ...sessionInfo, role: 'host' };
     this.role = 'host';
     this.createPeerConnection();
+    this.connectionStartedAt = Date.now();
     this.bindSignaling();
 
     const dataChannel = this.peerConnection.createDataChannel('dbridgr', {
@@ -74,6 +76,7 @@ export class WebRtcTransport extends EventTarget {
     this.sessionInfo = { ...sessionInfo, role: 'guest' };
     this.role = 'guest';
     this.createPeerConnection();
+    this.connectionStartedAt = Date.now();
     this.bindSignaling();
 
     this.peerConnection.ondatachannel = (event) => {
@@ -171,11 +174,22 @@ export class WebRtcTransport extends EventTarget {
   async handleSignalingMessage(event) {
     const payload = event.detail;
 
+    if (this.isStaleSignal(payload)) {
+      return;
+    }
+
     try {
       switch (payload.type) {
       case 'ready': {
+        if (payload.from !== 'guest' || this.role !== 'host') {
+          return;
+        }
         if (this.needsInitialOffer() && !this.negotiationStarted) {
           await this.createAndSendOffer();
+          return;
+        }
+        if (this.shouldRestartHostNegotiation()) {
+          await this.restartConnection();
         }
         return;
       }
@@ -186,7 +200,7 @@ export class WebRtcTransport extends EventTarget {
             peerPresent: this.role === 'host' ? payload.guestPresent : payload.hostPresent,
           },
         }));
-        if (payload.guestPresent && this.needsInitialOffer() && !this.negotiationStarted) {
+        if (this.role === 'host' && payload.guestPresent && this.needsInitialOffer() && !this.negotiationStarted) {
           await this.createAndSendOffer();
         }
         if (this.role === 'guest' && payload.hostPresent && !this.isOpen()) {
@@ -267,7 +281,7 @@ export class WebRtcTransport extends EventTarget {
   }
 
   async handleAnswer(answer) {
-    if (!this.peerConnection || this.role !== 'host' || this.peerConnection.currentRemoteDescription) {
+    if (!this.peerConnection || this.role !== 'host' || this.peerConnection.signalingState !== 'have-local-offer') {
       return;
     }
 
@@ -300,6 +314,34 @@ export class WebRtcTransport extends EventTarget {
     } catch {
       // Ready ping is best effort; polling will retry naturally.
     }
+  }
+
+  async sendControl(type, data) {
+    if (!this.sessionInfo) {
+      return;
+    }
+
+    return this.signaling.send(this.sessionInfo.code, this.sessionInfo.clientId, type, data);
+  }
+
+  isStaleSignal(payload) {
+    return Boolean(
+      payload?.sentAt
+      && this.connectionStartedAt
+      && payload.sentAt < this.connectionStartedAt
+      && payload.type !== 'peer-state'
+      && payload.type !== 'session-ended'
+    );
+  }
+
+  shouldRestartHostNegotiation() {
+    return Boolean(
+      this.role === 'host'
+      && this.peerConnection
+      && this.sessionInfo
+      && this.peerConnection.signalingState === 'stable'
+      && (this.peerConnection.localDescription || this.peerConnection.currentRemoteDescription)
+    );
   }
 
   async scheduleReconnect() {
@@ -381,6 +423,7 @@ export class WebRtcTransport extends EventTarget {
       }
 
       this.createPeerConnection();
+      this.connectionStartedAt = Date.now();
       this.signaling.connectStream(this.sessionInfo);
 
       if (this.role === 'host') {
@@ -483,6 +526,7 @@ export class WebRtcTransport extends EventTarget {
     this.restartingHost = false;
     this.disconnecting = false;
     this.pendingRemoteCandidates = [];
+    this.connectionStartedAt = 0;
     this.sessionInfo = null;
     this.role = null;
   }

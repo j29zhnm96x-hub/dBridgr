@@ -22,6 +22,7 @@ export class BridgeSession extends EventTarget {
     this.signalingBaseUrl = signalingBaseUrl;
     this.state = createIdleState();
     this.sessionInfo = null;
+    this.revivePromise = null;
 
     this.handleTransportState = this.handleTransportState.bind(this);
     this.handleTransportError = this.handleTransportError.bind(this);
@@ -156,14 +157,55 @@ export class BridgeSession extends EventTarget {
       throw new Error('Start or join a bridge first.');
     }
 
-    this.setState({
-      status: 'reconnecting',
-      error: '',
-      note: 'Reviving the bridge connection.',
+    if (this.revivePromise) {
+      return this.revivePromise;
+    }
+
+    const activeSession = { ...this.sessionInfo };
+    const reviveRole = activeSession.role || this.state.role;
+
+    this.revivePromise = (async () => {
+      this.setState({
+        status: 'reconnecting',
+        error: '',
+        note: 'Reviving the bridge connection.',
+      });
+
+      await this.resetRuntime();
+      this.sessionInfo = activeSession;
+
+      if (reviveRole === 'host') {
+        this.setState({
+          ...createIdleState('The code is live. Share it with the other device to start pairing.'),
+          status: 'hosting',
+          role: 'host',
+          code: activeSession.code,
+          expiresAt: activeSession.expiresAt,
+          peerLabel: 'Waiting for a joiner',
+          peerNote: 'When someone joins, the WebRTC data channel will negotiate automatically.',
+        });
+
+        await this.transport.host(this.sessionInfo);
+        return this.getSnapshot();
+      }
+
+      this.setState({
+        ...createIdleState('Joining the temporary bridge and waiting for negotiation.'),
+        status: 'joining',
+        role: 'guest',
+        code: activeSession.code,
+        expiresAt: activeSession.expiresAt,
+        peerLabel: 'Host found',
+        peerNote: 'Waiting for the host to finish the WebRTC offer/answer exchange.',
+      });
+
+      await this.transport.join(this.sessionInfo);
+      return this.getSnapshot();
+    })().finally(() => {
+      this.revivePromise = null;
     });
 
-    await this.transport.restartConnection();
-    return this.getSnapshot();
+    return this.revivePromise;
   }
 
   async sendText(text) {
