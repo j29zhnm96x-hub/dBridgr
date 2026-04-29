@@ -25,7 +25,7 @@ function renderBootstrapFailure(error) {
 
 async function main() {
   try {
-    const assetVersion = '2026-04-28-8';
+    const assetVersion = '2026-04-29-1';
     const [{ bootstrapApp }, { initTheme }] = await Promise.all([
       import(`./app.js?v=${assetVersion}`),
       import(`./core/theme.js?v=${assetVersion}`),

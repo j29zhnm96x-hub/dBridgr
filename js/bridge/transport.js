@@ -381,6 +381,7 @@ export class WebRtcTransport extends EventTarget {
       }
 
       this.createPeerConnection();
+      this.signaling.connectStream(this.sessionInfo);
 
       if (this.role === 'host') {
         const dataChannel = this.peerConnection.createDataChannel('dbridgr', {

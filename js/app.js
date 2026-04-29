@@ -43,6 +43,11 @@ function shouldDisableSend(connectionStatus) {
   return connectionStatus !== 'connected';
 }
 
+function isReviveRecommendedError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /not connected yet|Pair both devices before sending content/i.test(message);
+}
+
 function getFirstImageFile(source) {
   if (!source) {
     return null;
@@ -372,9 +377,13 @@ export function bootstrapApp({ initialTheme } = {}) {
     refs.codeExpiry.textContent = connection.code ? formatExpiry(connection.expiresAt) : 'Host to generate a temporary code.';
     refs.peerLabel.textContent = connection.peerLabel;
     refs.peerNote.textContent = connection.peerNote;
-    refs.connectionNote.textContent = connection.error || connection.note;
+    const reviveHint = connection.status === 'connected' || connection.status === 'reconnecting'
+      ? ' If the phone slept and sending stalls, tap Revive Bridge.'
+      : '';
+    refs.connectionNote.textContent = `${connection.error || connection.note}${reviveHint}`;
 
     refs.disconnectButton.disabled = connection.status === 'idle';
+    refs.reviveBridgeButton.disabled = connection.status === 'idle';
     refs.hostButton.textContent = connection.status === 'idle' ? 'Host a Bridge' : 'Host New Bridge';
     refs.openJoinButton.textContent = connection.status === 'idle' ? 'Join with Code' : 'Join Another Code';
   }
@@ -708,6 +717,19 @@ export function bootstrapApp({ initialTheme } = {}) {
     showToast('Bridge disconnected.', 'info');
   }
 
+  async function handleReviveBridge() {
+    try {
+      if (store.getState().connection.status === 'idle') {
+        showToast('Host or join a bridge first.', 'error');
+        return;
+      }
+
+      await session.revive();
+    } catch (error) {
+      showToast(error?.message || 'Could not revive the bridge.', 'error');
+    }
+  }
+
   async function handleClearSession() {
     const confirmed = window.confirm('Clear all sent and received data? This erases transfer history, current drafts, and selected media while keeping the bridge connection active.');
     if (!confirmed) {
@@ -739,6 +761,12 @@ export function bootstrapApp({ initialTheme } = {}) {
       await session.sendText(store.getState().composers.text.value);
       showToast('Text sent across the bridge.', 'success');
     } catch (error) {
+      if (isReviveRecommendedError(error) && store.getState().connection.status !== 'idle') {
+        showToast('The bridge may be asleep. Tap Revive Bridge, then try again.', 'error');
+        refs.reviveBridgeButton.focus();
+        return;
+      }
+
       showToast(error.message || 'Could not send that text.', 'error');
     }
   }
@@ -753,6 +781,12 @@ export function bootstrapApp({ initialTheme } = {}) {
       await session.sendFile({ kind, file });
       showToast(`${noun.charAt(0).toUpperCase() + noun.slice(1)} sent across the bridge.`, 'success');
     } catch (error) {
+      if (isReviveRecommendedError(error) && store.getState().connection.status !== 'idle') {
+        showToast('The bridge may be asleep. Tap Revive Bridge, then try again.', 'error');
+        refs.reviveBridgeButton.focus();
+        return;
+      }
+
       showToast(error.message || `Could not send that ${noun}.`, 'error');
     }
   }
@@ -926,6 +960,7 @@ export function bootstrapApp({ initialTheme } = {}) {
       receivedList: qs('#received-list'),
       screens: qsa('[data-screen]'),
       screenNavButtons: qsa('[data-screen-target]'),
+      reviveBridgeButton: qs('#revive-bridge-button'),
       pasteFileButton: qs('#paste-file-button'),
       sendFileButton: qs('#send-file-button'),
       sendPhotoButton: qs('#send-photo-button'),
@@ -946,6 +981,9 @@ export function bootstrapApp({ initialTheme } = {}) {
 
   refs.hostButton.addEventListener('click', handleHost);
   refs.openJoinButton.addEventListener('click', () => setJoinSheetOpen(true));
+  refs.reviveBridgeButton.addEventListener('click', () => {
+    void handleReviveBridge();
+  });
   refs.disconnectButton.addEventListener('click', handleDisconnect);
   refs.joinButton.addEventListener('click', handleJoin);
   refs.closeJoinButton.addEventListener('click', () => setJoinSheetOpen(false));

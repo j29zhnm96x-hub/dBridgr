@@ -151,6 +151,21 @@ export class BridgeSession extends EventTarget {
     this.setState(createIdleState());
   }
 
+  async revive() {
+    if (!this.sessionInfo) {
+      throw new Error('Start or join a bridge first.');
+    }
+
+    this.setState({
+      status: 'reconnecting',
+      error: '',
+      note: 'Reviving the bridge connection.',
+    });
+
+    await this.transport.restartConnection();
+    return this.getSnapshot();
+  }
+
   async sendText(text) {
     const normalized = String(text || '');
     if (!normalized.trim()) {
